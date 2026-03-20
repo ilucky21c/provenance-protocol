@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/provenance-protocol/sdk"
+    "url": "https://github.com/ilucky21c/provenance-protocol"
   },
   "homepage": "https://provenance.dev",
   "engines": {
