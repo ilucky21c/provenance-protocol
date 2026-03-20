@@ -145,6 +145,33 @@ export class Provenance {
    * Gate multiple agents in a single request.
    */
   gateBatch(provenanceIds: string[], options?: GateOptions): Promise<Record<string, GateResult>>;
+
+  /**
+   * Register or update this agent in the Provenance index.
+   * Call once at agent startup — idempotent, safe to call on every boot.
+   */
+  register(profile: RegisterProfile): Promise<RegisterResult>;
+}
+
+export interface RegisterProfile {
+  id: string;
+  url: string;
+  name?: string;
+  description?: string;
+  capabilities?: string[];
+  constraints?: string[];
+  model_provider?: string;
+  model_id?: string;
+  contact_url?: string;
+  ajp_endpoint?: string;
+  public_key?: string;
+  version?: string;
+}
+
+export interface RegisterResult {
+  created?: boolean;
+  updated?: boolean;
+  agent: object;
 }
 
 /**

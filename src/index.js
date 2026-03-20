@@ -512,5 +512,59 @@ export class Provenance {
   }
 }
 
+  // ── Self-registration ─────────────────────────────────────────────────────
+
+  /**
+   * Register or update this agent in the Provenance index.
+   * Call once at agent startup — idempotent, safe to call on every boot.
+   *
+   * Example:
+   *   import { provenance } from 'provenance-protocol';
+   *
+   *   await provenance.register({
+   *     id: 'provenance:github:your-org/your-agent',
+   *     url: 'https://github.com/your-org/your-agent',
+   *     name: 'Your Agent',
+   *     description: 'What it does',
+   *     capabilities: ['read:web', 'write:summaries'],
+   *     constraints: ['no:pii', 'no:financial:transact'],
+   *   });
+   *
+   * @param {object} profile
+   * @param {string} profile.id            provenance:<platform>:<owner>/<name>
+   * @param {string} profile.url           Canonical URL (GitHub repo, package page, etc.)
+   * @param {string} [profile.name]        Display name
+   * @param {string} [profile.description] One-sentence description
+   * @param {string[]} [profile.capabilities]
+   * @param {string[]} [profile.constraints]
+   * @param {string} [profile.model_provider]
+   * @param {string} [profile.model_id]
+   * @param {string} [profile.contact_url]
+   * @param {string} [profile.ajp_endpoint]
+   * @param {string} [profile.public_key]  Ed25519 public key: "ed25519:<base64>"
+   * @param {string} [profile.version]
+   * @returns {{ created: boolean, updated: boolean, agent: object }}
+   */
+  async register(profile = {}) {
+    const { id, ...rest } = profile;
+    if (!id) throw new Error('profile.id is required');
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/agents/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provenance_id: id, ...rest }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Registration failed: ${res.status}`);
+      }
+      return res.json();
+    } catch (e) {
+      throw new Error(`Provenance.register failed: ${e.message}`);
+    }
+  }
+}
+
 // Default instance pointing at provenance.dev
 export const provenance = new Provenance();

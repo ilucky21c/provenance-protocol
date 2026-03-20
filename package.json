@@ -1,6 +1,6 @@
 {
   "name": "provenance-protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SDK for querying the Provenance agent identity index",
   "type": "module",
   "main": "./src/index.js",
@@ -16,7 +16,14 @@
     "src/index.d.ts",
     "README.md"
   ],
-  "keywords": ["ai-agent", "agent-identity", "provenance", "trust", "llm", "verification"],
+  "keywords": [
+    "ai-agent",
+    "agent-identity",
+    "provenance",
+    "trust",
+    "llm",
+    "verification"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
