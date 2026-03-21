@@ -39,3 +39,10 @@ export function signChallenge(privateKeyBase64: string, provenanceId: string, no
  * @returns                 Base64 signature — put in PROVENANCE.yml identity.signature
  */
 export function signForProvenance(privateKeyBase64: string, provenanceId: string, publicKeyBase64: string): string;
+
+/**
+ * Sign a revocation request — clears your agent's public key and identity_verified status.
+ * Use when your private key is compromised or you're rotating keys.
+ * Send the result as signed_challenge to POST /api/agents/revoke.
+ */
+export function signRevocation(privateKeyBase64: string, provenanceId: string): string;

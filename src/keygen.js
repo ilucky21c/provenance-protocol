@@ -111,6 +111,29 @@ export function signChallenge(privateKeyBase64, provenanceId, nonce) {
  *   console.log(`  public_key: "${publicKey}"`);
  *   console.log(`  signature: "${signature}"`);
  */
+/**
+ * Sign a revocation request.
+ *
+ * Call this when you want to revoke your agent's cryptographic identity —
+ * e.g. if your private key was compromised or you're rotating keys.
+ *
+ * @param {string} privateKeyBase64  Your current PROVENANCE_PRIVATE_KEY
+ * @param {string} provenanceId     Your agent's Provenance ID
+ * @returns {string}                Base64 signature — send as signed_challenge to POST /api/agents/revoke
+ *
+ * Example:
+ *   import { signRevocation } from 'provenance-protocol/keygen';
+ *   const signed_challenge = signRevocation(process.env.PROVENANCE_PRIVATE_KEY, provenanceId);
+ *   await fetch('https://provenance.dev/api/agents/revoke', {
+ *     method: 'POST',
+ *     headers: { 'Content-Type': 'application/json' },
+ *     body: JSON.stringify({ provenance_id: provenanceId, signed_challenge }),
+ *   });
+ */
+export function signRevocation(privateKeyBase64, provenanceId) {
+  return signChallenge(privateKeyBase64, provenanceId, 'REVOKE');
+}
+
 export function signForProvenance(privateKeyBase64, provenanceId, publicKeyBase64) {
   const keyBuffer = Buffer.from(privateKeyBase64, 'base64');
   const privateKey = createPrivateKey({ key: keyBuffer, format: 'der', type: 'pkcs8' });
