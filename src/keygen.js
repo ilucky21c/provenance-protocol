@@ -85,3 +85,35 @@ export function signChallenge(privateKeyBase64, provenanceId, nonce) {
   const message = Buffer.from(`${provenanceId}:${nonce}`, 'utf8');
   return sign(null, message, privateKey).toString('base64');
 }
+
+/**
+ * Sign your PROVENANCE.yml identity claim.
+ *
+ * Call this once after generating your keypair to produce the `identity.signature`
+ * value that goes into PROVENANCE.yml. The signature proves you control the private
+ * key that matches the public key in the file.
+ *
+ * The signed message is `${provenanceId}:${publicKeyBase64}` — this binds the key
+ * pair to your specific Provenance ID, preventing key reuse across identities.
+ *
+ * @param {string} privateKeyBase64  Your PROVENANCE_PRIVATE_KEY (base64 PKCS8 DER)
+ * @param {string} provenanceId     Your agent's Provenance ID, e.g. "provenance:github:alice/agent"
+ * @param {string} publicKeyBase64  The public key you're registering (base64 SPKI DER)
+ * @returns {string}                Base64-encoded signature — put this in identity.signature
+ *
+ * Example (one-time setup):
+ *   import { generateProvenanceKeyPair, signForProvenance } from 'provenance-protocol/keygen';
+ *   const { publicKey, privateKey } = generateProvenanceKeyPair();
+ *   const id = 'provenance:github:your-org/your-agent';
+ *   const signature = signForProvenance(privateKey, id, publicKey);
+ *   console.log('Add to PROVENANCE.yml:');
+ *   console.log('identity:');
+ *   console.log(`  public_key: "${publicKey}"`);
+ *   console.log(`  signature: "${signature}"`);
+ */
+export function signForProvenance(privateKeyBase64, provenanceId, publicKeyBase64) {
+  const keyBuffer = Buffer.from(privateKeyBase64, 'base64');
+  const privateKey = createPrivateKey({ key: keyBuffer, format: 'der', type: 'pkcs8' });
+  const message = Buffer.from(`${provenanceId}:${publicKeyBase64}`, 'utf8');
+  return sign(null, message, privateKey).toString('base64');
+}

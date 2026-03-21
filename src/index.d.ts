@@ -164,7 +164,17 @@ export interface RegisterProfile {
   model_id?: string;
   contact_url?: string;
   ajp_endpoint?: string;
+  /**
+   * Base64-encoded Ed25519 SPKI DER public key.
+   * When provided, signed_challenge is also required.
+   */
   public_key?: string;
+  /**
+   * Base64 Ed25519 signature of `${provenance_id}:REGISTER` using your private key.
+   * Required when public_key is provided — proves you control the key you're registering.
+   * Generate with: signChallenge(privateKey, provenanceId, 'REGISTER') from provenance-protocol/keygen
+   */
+  signed_challenge?: string;
   version?: string;
 }
 

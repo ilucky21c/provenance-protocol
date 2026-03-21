@@ -510,7 +510,6 @@ export class Provenance {
     // → github/alice/research-assistant
     return provenanceId.replace('provenance:', '').replace(':', '/');
   }
-}
 
   // ── Self-registration ─────────────────────────────────────────────────────
 
@@ -518,30 +517,24 @@ export class Provenance {
    * Register or update this agent in the Provenance index.
    * Call once at agent startup — idempotent, safe to call on every boot.
    *
-   * Example:
-   *   import { provenance } from 'provenance-protocol';
-   *
-   *   await provenance.register({
-   *     id: 'provenance:github:your-org/your-agent',
-   *     url: 'https://github.com/your-org/your-agent',
-   *     name: 'Your Agent',
-   *     description: 'What it does',
-   *     capabilities: ['read:web', 'write:summaries'],
-   *     constraints: ['no:pii', 'no:financial:transact'],
-   *   });
+   * To register with cryptographic proof (identity_verified: true, confidence: 1.0),
+   * provide public_key and signed_challenge:
+   *   import { signChallenge } from 'provenance-protocol/keygen';
+   *   const signed_challenge = signChallenge(process.env.PROVENANCE_PRIVATE_KEY, id, 'REGISTER');
    *
    * @param {object} profile
-   * @param {string} profile.id            provenance:<platform>:<owner>/<name>
-   * @param {string} profile.url           Canonical URL (GitHub repo, package page, etc.)
-   * @param {string} [profile.name]        Display name
-   * @param {string} [profile.description] One-sentence description
+   * @param {string} profile.id              provenance:<platform>:<owner>/<name>
+   * @param {string} profile.url             Canonical URL (GitHub repo, package page, etc.)
+   * @param {string} [profile.name]          Display name
+   * @param {string} [profile.description]   One-sentence description
    * @param {string[]} [profile.capabilities]
    * @param {string[]} [profile.constraints]
    * @param {string} [profile.model_provider]
    * @param {string} [profile.model_id]
    * @param {string} [profile.contact_url]
    * @param {string} [profile.ajp_endpoint]
-   * @param {string} [profile.public_key]  Ed25519 public key: "ed25519:<base64>"
+   * @param {string} [profile.public_key]    Ed25519 SPKI DER public key (base64)
+   * @param {string} [profile.signed_challenge] Signature of `${id}:REGISTER` — required with public_key
    * @param {string} [profile.version]
    * @returns {{ created: boolean, updated: boolean, agent: object }}
    */

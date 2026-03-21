@@ -25,3 +25,17 @@ export function generateProvenanceKeyPair(): KeyPair;
  * @param nonce             The nonce sent by the receiving system
  */
 export function signChallenge(privateKeyBase64: string, provenanceId: string, nonce: string): string;
+
+/**
+ * Sign your PROVENANCE.yml identity claim.
+ *
+ * Produces the `identity.signature` value for PROVENANCE.yml.
+ * Signs `${provenanceId}:${publicKeyBase64}` — binding the keypair to your specific agent ID.
+ * Run once during setup, after generateProvenanceKeyPair().
+ *
+ * @param privateKeyBase64  Your PROVENANCE_PRIVATE_KEY (base64 PKCS8 DER)
+ * @param provenanceId      Your agent's Provenance ID
+ * @param publicKeyBase64   The public key you generated (base64 SPKI DER)
+ * @returns                 Base64 signature — put in PROVENANCE.yml identity.signature
+ */
+export function signForProvenance(privateKeyBase64: string, provenanceId: string, publicKeyBase64: string): string;
