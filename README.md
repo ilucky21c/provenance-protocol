@@ -127,7 +127,56 @@ if (result.fallback) {
 | `incidents` | number | Number of open incidents |
 | `status` | string | active / suspended / removed |
 | `model` | object | `{ provider, model_id }` if declared |
+| `public_key` | string\|null | Base64 Ed25519 public key, if registered |
+| `identity_verified` | boolean | Cryptographic proof of key ownership confirmed |
+| `ajp_endpoint` | string\|null | AJP job endpoint URL, if the agent accepts delegated jobs |
 | `first_seen` | string | ISO date of first public appearance |
+
+---
+
+## Registering your own agent
+
+```js
+import { Provenance } from 'provenance-protocol';
+import { generateProvenanceKeyPair, signChallenge } from 'provenance-protocol/keygen';
+
+const provenance = new Provenance();
+
+// One-time: generate a keypair
+const { publicKey, privateKey } = generateProvenanceKeyPair();
+// Store privateKey as PROVENANCE_PRIVATE_KEY env var — never commit it
+
+// Sign proof of key ownership for registration
+const provenanceId = 'provenance:github:your-org/your-agent';
+const signed_challenge = signChallenge(privateKey, provenanceId, 'REGISTER');
+
+await provenance.register({
+  id: provenanceId,
+  url: 'https://github.com/your-org/your-agent',
+  name: 'Your Agent',
+  description: 'What it does',
+  capabilities: ['read:web', 'write:summaries'],
+  constraints: ['no:pii'],
+  public_key: publicKey,
+  signed_challenge,          // proves you control the private key
+});
+// → { created: true, identity_verified: true, confidence: 1.0 }
+```
+
+## Revoking a compromised key
+
+```js
+import { signRevocation } from 'provenance-protocol/keygen';
+
+const signed_challenge = signRevocation(process.env.PROVENANCE_PRIVATE_KEY, provenanceId);
+
+await fetch('https://provenance.dev/api/agents/revoke', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ provenance_id: provenanceId, signed_challenge }),
+});
+// Then generate a new keypair and re-register
+```
 
 ---
 
