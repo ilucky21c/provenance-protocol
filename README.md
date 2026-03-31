@@ -180,4 +180,35 @@ await fetch('https://provenance.dev/api/agents/revoke', {
 
 ---
 
-## MIT License — provenance.dev
+## CLI
+
+```bash
+npx provenance keygen
+npx provenance register --id provenance:github:your-org/your-agent --url https://github.com/...
+npx provenance status provenance:github:alice/my-agent
+npx provenance validate PROVENANCE.yml
+npx provenance revoke --id provenance:github:your-org/your-agent
+```
+
+Full CLI reference: [provenance-web-mu.vercel.app/docs#cli](https://provenance-web-mu.vercel.app/docs#cli)
+
+---
+
+## Layers
+
+`provenance-protocol` is the identity layer. Protocols that build on it:
+
+| Package | Purpose |
+|---|---|
+| `provenance-protocol` | Agent identity, trust, and registration (this package) |
+| [`ajp-protocol`](https://www.npmjs.com/package/ajp-protocol) | Agent Job Protocol — agent-to-agent job delegation |
+
+---
+
+## Full documentation
+
+[provenance-web-mu.vercel.app/docs](https://provenance-web-mu.vercel.app/docs)
+
+---
+
+## MIT License — provenance-web-mu.vercel.app

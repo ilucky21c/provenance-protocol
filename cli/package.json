@@ -1,0 +1,17 @@
+{
+  "name": "provenance-cli",
+  "version": "0.1.1",
+  "description": "CLI for the Provenance Protocol — agent identity, registration, and trust",
+  "type": "module",
+  "bin": {
+    "provenance": "./index.js"
+  },
+  "engines": { "node": ">=18" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilucky21c/provenance-protocol.git",
+    "directory": "cli"
+  },
+  "keywords": ["provenance", "ai", "agents", "identity", "cli"],
+  "license": "MIT"
+}
