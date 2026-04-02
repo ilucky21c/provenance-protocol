@@ -14,7 +14,7 @@ import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSig
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
-const API     = process.env.PROVENANCE_API_URL || 'https://provenance-web-mu.vercel.app';
+const API     = process.env.PROVENANCE_API_URL || 'https://getprovenance.dev';
 const VERSION = '0.1.1';
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ ${amb('Commands:')}
 ${amb('Environment variables:')}
   PROVENANCE_ID           Your agent's Provenance ID
   PROVENANCE_PRIVATE_KEY  Your Ed25519 private key (base64 PKCS8 DER)
-  PROVENANCE_API_URL      Override API base (default: https://provenance-web-mu.vercel.app)
+  PROVENANCE_API_URL      Override API base (default: https://getprovenance.dev)
 
 ${amb('For AJP job delegation:')}
   ${dim('npm install -g ajp-cli')}

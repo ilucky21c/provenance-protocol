@@ -44,7 +44,7 @@ async function _verifyEd25519(publicKeyBase64, signatureBase64, message) {
   return subtle.verify('Ed25519', cryptoKey, sigBuffer, msgBuffer);
 }
 
-const DEFAULT_API = 'https://provenance.dev';
+const DEFAULT_API = 'https://getprovenance.dev';
 const DEFAULT_CACHE_TTL = 300; // 5 minutes
 
 // Simple LRU cache

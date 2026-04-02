@@ -29,7 +29,7 @@
     "type": "git",
     "url": "https://github.com/ilucky21c/provenance-protocol"
   },
-  "homepage": "https://provenance.dev",
+  "homepage": "https://getprovenance.dev",
   "engines": {
     "node": ">=14.0.0"
   }

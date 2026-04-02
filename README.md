@@ -1,6 +1,6 @@
 # provenance-protocol
 
-SDK for querying the [Provenance](https://provenance.dev) agent identity index.
+SDK for querying the [Provenance](https://getprovenance.dev) agent identity index.
 
 Drop this into any receiving system — marketplace, API, agent orchestrator —
 to verify an AI agent's identity and trust profile before allowing it in.
@@ -170,7 +170,7 @@ import { signRevocation } from 'provenance-protocol/keygen';
 
 const signed_challenge = signRevocation(process.env.PROVENANCE_PRIVATE_KEY, provenanceId);
 
-await fetch('https://provenance.dev/api/agents/revoke', {
+await fetch('https://getprovenance.dev/api/agents/revoke', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ provenance_id: provenanceId, signed_challenge }),
@@ -190,7 +190,7 @@ npx provenance validate PROVENANCE.yml
 npx provenance revoke --id provenance:github:your-org/your-agent
 ```
 
-Full CLI reference: [provenance-web-mu.vercel.app/docs#cli](https://provenance-web-mu.vercel.app/docs#cli)
+Full CLI reference: [getprovenance.dev/docs#cli](https://getprovenance.dev/docs#cli)
 
 ---
 
@@ -207,8 +207,8 @@ Full CLI reference: [provenance-web-mu.vercel.app/docs#cli](https://provenance-w
 
 ## Full documentation
 
-[provenance-web-mu.vercel.app/docs](https://provenance-web-mu.vercel.app/docs)
+[getprovenance.dev/docs](https://getprovenance.dev/docs)
 
 ---
 
-## MIT License — provenance-web-mu.vercel.app
+## MIT License — getprovenance.dev

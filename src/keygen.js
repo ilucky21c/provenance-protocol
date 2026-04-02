@@ -124,7 +124,7 @@ export function signChallenge(privateKeyBase64, provenanceId, nonce) {
  * Example:
  *   import { signRevocation } from 'provenance-protocol/keygen';
  *   const signed_challenge = signRevocation(process.env.PROVENANCE_PRIVATE_KEY, provenanceId);
- *   await fetch('https://provenance.dev/api/agents/revoke', {
+ *   await fetch('https://getprovenance.dev/api/agents/revoke', {
  *     method: 'POST',
  *     headers: { 'Content-Type': 'application/json' },
  *     body: JSON.stringify({ provenance_id: provenanceId, signed_challenge }),
