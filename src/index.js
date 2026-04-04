@@ -100,9 +100,10 @@ export class Provenance {
    *   const trust = await provenance.check('provenance:github:alice/research-assistant');
    *   // {
    *   //   found: true,
-   *   //   declared: true,       — has PROVENANCE.yml
-   *   //   age_days: 142,        — how long this agent has existed publicly
-   *   //   confidence: 0.9,
+   *   //   declared: true,            — has PROVENANCE.yml
+   *   //   identity_verified: true,   — cryptographic proof of ownership
+   *   //   age_days: 142,             — how long this agent has existed publicly
+   *   //   confidence: 0.9,           — internal signal, use declared/identity_verified for trust decisions
    *   //   capabilities: ['read:web', 'write:summaries'],
    *   //   constraints: ['no:financial:transact', 'no:pii'],
    *   //   incidents: 0,
@@ -132,6 +133,7 @@ export class Provenance {
         platform: data.platform,
         name: data.name,
         declared: data.declared,
+        identity_verified: data.identity_verified || false,
         confidence: data.confidence,
         age_days: data.timestamps?.first_seen
           ? Math.floor((Date.now() - new Date(data.timestamps.first_seen)) / 86400000)
@@ -524,7 +526,11 @@ export class Provenance {
    *
    * @param {object} profile
    * @param {string} profile.id              provenance:<platform>:<owner>/<name>
-   * @param {string} profile.url             Canonical URL (GitHub repo, package page, etc.)
+   *                                         Platforms: github, huggingface, npm, pypi, clawmarket, custom
+   *                                         Use "custom" for private agents without a public repo.
+   * @param {string} [profile.url]           Canonical URL. Optional for custom platform agents.
+   * @param {string} [profile.readme_summary] 2-3 sentence plain-English description shown on profile.
+   *                                          For private agents without a README — write it yourself.
    * @param {string} [profile.name]          Display name
    * @param {string} [profile.description]   One-sentence description
    * @param {string[]} [profile.capabilities]
