@@ -21,9 +21,10 @@ const trust = await provenance.check('provenance:github:alice/research-assistant
 console.log(trust);
 // {
 //   found: true,
+//   identity: 'verified',       // 'inferred' | 'declared' | 'verified'
+//   identity_verified: true,
 //   declared: true,
 //   age_days: 142,
-//   confidence: 0.9,
 //   capabilities: ['read:web', 'write:summaries'],
 //   constraints: ['no:financial:transact', 'no:pii'],
 //   incidents: 0,
@@ -39,11 +40,11 @@ The most useful method for receiving systems.
 
 ```js
 const result = await provenance.gate('provenance:github:alice/agent', {
-  requireDeclared: true,                                  // must have PROVENANCE.yml
+  requireDeclared: true,                                    // must have PROVENANCE.yml
+  requireVerified: true,                                    // must have identity_verified: true
   requireConstraints: ['no:financial:transact', 'no:pii'], // must have committed to these
-  requireClean: true,                                     // no open incidents
-  requireMinAge: 30,                                      // must be at least 30 days old
-  requireMinConfidence: 0.7,                              // classification confidence
+  requireClean: true,                                       // no open incidents
+  requireMinAge: 30,                                        // must be at least 30 days old
 });
 
 if (!result.allowed) {
@@ -119,35 +120,42 @@ if (result.fallback) {
 | Field | Type | Description |
 |---|---|---|
 | `found` | boolean | Agent exists in Provenance index |
-| `declared` | boolean | Has a PROVENANCE.yml file |
+| `identity` | string | `'inferred'` \| `'declared'` \| `'verified'` — see below |
+| `identity_verified` | boolean | Cryptographic key ownership confirmed against a public URL |
+| `declared` | boolean | Agent has a PROVENANCE.yml (or registered via API with full fields) |
 | `age_days` | number | Days since first indexed |
-| `confidence` | number | 0–1 classification confidence |
 | `capabilities` | string[] | What the agent declares it can do |
 | `constraints` | string[] | What the agent has publicly committed never to do |
 | `incidents` | number | Number of open incidents |
-| `status` | string | active / suspended / removed |
+| `status` | string | `active` / `suspended` / `removed` |
 | `model` | object | `{ provider, model_id }` if declared |
 | `public_key` | string\|null | Base64 Ed25519 public key, if registered |
-| `identity_verified` | boolean | Cryptographic proof of key ownership confirmed |
 | `ajp_endpoint` | string\|null | AJP job endpoint URL, if the agent accepts delegated jobs |
 | `first_seen` | string | ISO date of first public appearance |
+
+### Identity states
+
+| State | Meaning |
+|---|---|
+| `inferred` | Indexed by crawler from a public repo. No PROVENANCE.yml, no self-registration. |
+| `declared` | Agent registered itself (or has PROVENANCE.yml) but without cryptographic key verification. |
+| `verified` | Agent registered with a keypair and the public key was confirmed against a publicly fetchable PROVENANCE.yml. **Independently auditable** — anyone can re-verify without trusting the Provenance registry. |
 
 ---
 
 ## Registering your own agent
 
+### Public repo (GitHub / HuggingFace / npm)
+
+Push a `PROVENANCE.yml` containing your public key to the repo, then register. The server fetches the file and confirms the key — independently verifiable by anyone.
+
 ```js
-import { Provenance } from 'provenance-protocol';
-import { generateProvenanceKeyPair, signChallenge } from 'provenance-protocol/keygen';
+import { generateProvenanceKeyPair, signForProvenance, signChallenge } from 'provenance-protocol/keygen';
 
-const provenance = new Provenance();
-
-// One-time: generate a keypair
 const { publicKey, privateKey } = generateProvenanceKeyPair();
-// Store privateKey as PROVENANCE_PRIVATE_KEY env var — never commit it
-
-// Sign proof of key ownership for registration
 const provenanceId = 'provenance:github:your-org/your-agent';
+
+// Add to PROVENANCE.yml → commit → push, then:
 const signed_challenge = signChallenge(privateKey, provenanceId, 'REGISTER');
 
 await provenance.register({
@@ -158,10 +166,33 @@ await provenance.register({
   capabilities: ['read:web', 'write:summaries'],
   constraints: ['no:pii'],
   public_key: publicKey,
-  signed_challenge,          // proves you control the private key
+  signed_challenge,
 });
-// → { created: true, identity_verified: true, confidence: 1.0 }
+// → { created: true, agent: { identity: 'verified', identity_verified: true } }
 ```
+
+### Private agent (no public repo)
+
+Use `provenance:custom:` platform. Host your `PROVENANCE.yml` at any public URL you control and pass it as `url` — this makes the identity independently verifiable. Without a `url`, verification is registry-dependent (key control only).
+
+```js
+const provenanceId = 'provenance:custom:your-org/your-agent';
+const signed_challenge = signChallenge(privateKey, provenanceId, 'REGISTER');
+
+await provenance.register({
+  id: provenanceId,
+  url: 'https://yourdomain.com/.well-known/provenance.yml', // optional but recommended
+  name: 'Your Agent',
+  description: 'What it does',
+  capabilities: ['read:web'],
+  constraints: ['no:pii'],
+  public_key: publicKey,
+  signed_challenge,
+});
+// → { created: true, agent: { identity: 'verified', identity_verified: true } }
+```
+
+See [getprovenance.dev/docs#ai-quickstart](https://getprovenance.dev/docs#ai-quickstart) for full automated scripts.
 
 ## Revoking a compromised key
 
