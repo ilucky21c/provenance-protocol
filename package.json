@@ -1,10 +1,13 @@
 {
   "name": "provenance-protocol",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "SDK for querying the Provenance agent identity index",
   "type": "module",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
+  "bin": {
+    "provenance": "./src/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -20,6 +23,7 @@
     "src/index.d.ts",
     "src/keygen.js",
     "src/keygen.d.ts",
+    "src/cli.js",
     "README.md"
   ],
   "keywords": [
