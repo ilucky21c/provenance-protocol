@@ -8,6 +8,7 @@ export interface TrustProfile {
   platform?: string;
   name?: string;
   declared?: boolean;
+  identity_verified?: boolean;
   confidence?: number;
   age_days?: number | null;
   capabilities?: string[];
@@ -45,6 +46,8 @@ export interface VerifyResult {
 
 export interface GateOptions {
   requireDeclared?: boolean;
+  /** Require identity_verified: true — agent must have cryptographic proof of key ownership. */
+  requireVerified?: boolean;
   requireConstraints?: string[];
   requireCapabilities?: string[];
   requireClean?: boolean;

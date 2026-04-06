@@ -275,6 +275,7 @@ export class Provenance {
    */
   async gate(provenanceId, {
     requireDeclared = false,
+    requireVerified = false,
     requireConstraints = [],
     requireCapabilities = [],
     requireClean = true,
@@ -320,6 +321,9 @@ export class Provenance {
     }
     if (requireDeclared && !trust.declared) {
       return { allowed: false, reason: 'Agent has not declared a PROVENANCE.yml file', trust };
+    }
+    if (requireVerified && !trust.identity_verified) {
+      return { allowed: false, reason: 'Agent identity is not cryptographically verified', trust };
     }
     if (requireClean && trust.incidents > 0) {
       return { allowed: false, reason: `Agent has ${trust.incidents} open incident(s)`, trust };
@@ -466,6 +470,7 @@ export class Provenance {
   _evaluateGate(trust, options) {
     const {
       requireDeclared = false,
+      requireVerified = false,
       requireConstraints = [],
       requireCapabilities = [],
       requireClean = true,
@@ -481,6 +486,9 @@ export class Provenance {
     }
     if (requireDeclared && !trust.declared) {
       return { allowed: false, reason: 'Agent has not declared a PROVENANCE.yml file', trust };
+    }
+    if (requireVerified && !trust.identity_verified) {
+      return { allowed: false, reason: 'Agent identity is not cryptographically verified', trust };
     }
     for (const c of requireConstraints) {
       if (!trust.constraints?.includes(c)) {
