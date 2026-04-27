@@ -45,6 +45,35 @@ async function _verifyEd25519(publicKeyBase64, signatureBase64, message) {
 }
 
 const DEFAULT_API = 'https://getprovenance.dev';
+
+const SEVERITY_ORDER = ['low', 'medium', 'high', 'critical'];
+
+// Returns a failure reason string if clean check fails, null if passes.
+// requireClean: true | false | { minSeverity: 'low'|'medium'|'high'|'critical' }
+function _evaluateClean(requireClean, trust) {
+  if (!requireClean) return null;
+  if (trust.incidents === 0) return null;
+
+  // true = block on any open incident
+  if (requireClean === true) {
+    return `Agent has ${trust.incidents} open incident(s)`;
+  }
+
+  // { minSeverity } = block only if any incident meets or exceeds that severity
+  if (requireClean.minSeverity) {
+    const threshold = SEVERITY_ORDER.indexOf(requireClean.minSeverity);
+    const incidents = trust.incidents_detail || [];
+    const blocking = incidents.filter(inc =>
+      SEVERITY_ORDER.indexOf(inc.severity || 'medium') >= threshold
+    );
+    if (blocking.length > 0) {
+      return `Agent has ${blocking.length} incident(s) at or above severity '${requireClean.minSeverity}'`;
+    }
+    return null;
+  }
+
+  return null;
+}
 const DEFAULT_CACHE_TTL = 300; // 5 minutes
 
 // Simple LRU cache
@@ -141,6 +170,7 @@ export class Provenance {
         capabilities: data.capabilities || [],
         constraints: data.constraints || [],
         incidents: data.incident_count || 0,
+        incidents_detail: data.incidents || [],
         model: data.model || null,
         status: data.status || 'unknown',
         first_seen: data.timestamps?.first_seen || null,
@@ -260,11 +290,18 @@ export class Provenance {
    * Run all your trust requirements in one call.
    * Returns { allowed, reason, trust }.
    *
+   * requireClean accepts:
+   *   - true                    block on any open incident (default)
+   *   - false                   ignore incidents entirely
+   *   - { minSeverity }         block only if any open incident meets or exceeds severity
+   *                             severity order: low < medium < high < critical
+   *                             e.g. { minSeverity: 'high' } allows low/medium incidents
+   *
    * Example:
    *   const result = await provenance.gate('provenance:github:alice/agent', {
    *     requireDeclared: true,
    *     requireConstraints: ['no:financial:transact', 'no:pii'],
-   *     requireClean: true,
+   *     requireClean: { minSeverity: 'high' },
    *     requireMinAge: 30,
    *     requireMinConfidence: 0.7,
    *   });
@@ -325,8 +362,9 @@ export class Provenance {
     if (requireVerified && !trust.identity_verified) {
       return { allowed: false, reason: 'Agent identity is not cryptographically verified', trust };
     }
-    if (requireClean && trust.incidents > 0) {
-      return { allowed: false, reason: `Agent has ${trust.incidents} open incident(s)`, trust };
+    if (requireClean) {
+      const blocked = _evaluateClean(requireClean, trust);
+      if (blocked) return { allowed: false, reason: blocked, trust };
     }
     if (requireMinConfidence && trust.confidence < requireMinConfidence) {
       return { allowed: false, reason: `Agent confidence ${trust.confidence} below required ${requireMinConfidence}`, trust };
@@ -500,8 +538,9 @@ export class Provenance {
         return { allowed: false, reason: `Agent does not have capability: ${c}`, trust };
       }
     }
-    if (requireClean && trust.incidents > 0) {
-      return { allowed: false, reason: `Agent has ${trust.incidents} open incident(s)`, trust };
+    if (requireClean) {
+      const blocked = _evaluateClean(requireClean, trust);
+      if (blocked) return { allowed: false, reason: blocked, trust };
     }
     if (requireMinAge > 0 && (trust.age_days || 0) < requireMinAge) {
       return { allowed: false, reason: `Agent is only ${trust.age_days || 0} days old (minimum: ${requireMinAge})`, trust };

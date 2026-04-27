@@ -1,6 +1,6 @@
 {
   "name": "provenance-protocol",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "SDK for querying the Provenance agent identity index",
   "type": "module",
   "main": "./src/index.js",
