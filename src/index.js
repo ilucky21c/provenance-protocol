@@ -59,7 +59,7 @@ function _evaluateClean(requireClean, trust) {
     return `Agent has ${trust.incidents} open incident(s)`;
   }
 
-  // { minSeverity } = block only if any incident meets or exceeds that severity
+  // { minSeverity } = block only if any open incident meets or exceeds that severity
   if (requireClean.minSeverity) {
     const threshold = SEVERITY_ORDER.indexOf(requireClean.minSeverity);
     const incidents = trust.incidents_detail || [];
@@ -67,7 +67,7 @@ function _evaluateClean(requireClean, trust) {
       SEVERITY_ORDER.indexOf(inc.severity || 'medium') >= threshold
     );
     if (blocking.length > 0) {
-      return `Agent has ${blocking.length} incident(s) at or above severity '${requireClean.minSeverity}'`;
+      return `Agent has ${blocking.length} open incident(s) at or above severity '${requireClean.minSeverity}'`;
     }
     return null;
   }
@@ -135,7 +135,7 @@ export class Provenance {
    *   //   confidence: 0.9,           — internal signal, use declared/identity_verified for trust decisions
    *   //   capabilities: ['read:web', 'write:summaries'],
    *   //   constraints: ['no:financial:transact', 'no:pii'],
-   *   //   incidents: 0,
+   *   //   incidents: 0,              — open/investigating only; resolved don't block gate()
    *   //   model: { provider: 'anthropic', model_id: 'claude-sonnet-4-5' },
    *   //   status: 'active',
    *   // }
@@ -171,6 +171,7 @@ export class Provenance {
         constraints: data.constraints || [],
         incidents: data.incident_count || 0,
         incidents_detail: data.incidents || [],
+        resolved_incidents: data.resolved_incidents || [],
         model: data.model || null,
         status: data.status || 'unknown',
         first_seen: data.timestamps?.first_seen || null,
