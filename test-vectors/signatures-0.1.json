@@ -1,0 +1,80 @@
+{
+  "$comment": "Normative test vectors for Provenance Protocol v0.1 signatures. Ed25519 is deterministic (RFC 8032): a correct implementation reproduces these signatures byte for byte.",
+  "spec_version": "0.1",
+  "algorithm": "ed25519",
+  "encodings": {
+    "public_key": "base64 of SPKI DER",
+    "private_key": "base64 of PKCS8 DER",
+    "signature": "base64 of raw 64-byte Ed25519 signature",
+    "message": "UTF-8 bytes of the message string"
+  },
+  "keypair": {
+    "provenance_id": "provenance:github:example/research-agent",
+    "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIMzkaPUByQh5c1/dZ9on5XWDP+0IBFrCyiAXAvhtBAFg",
+    "$comment": "Test key only. Never use in production."
+  },
+  "vectors": [
+    {
+      "id": "identity-signature-valid",
+      "purpose": "identity.signature in PROVENANCE.yml \u2014 binds the declaration to the key holder",
+      "message_template": "<provenance_id>:<public_key>",
+      "message": "provenance:github:example/research-agent:MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "signature": "TCnS9o9yiDboy3SFlG65ThO6IDAhv09rlrDWOdvX2xZj3uAI5efbIw8xIXHxErtcaJAtg3BtDvXX+bv5RhLIDQ==",
+      "expect": "valid"
+    },
+    {
+      "id": "challenge-signature-valid",
+      "purpose": "live proof that a running agent controls the declared key",
+      "message_template": "<provenance_id>:<nonce>",
+      "nonce": "a7f3c1e9b2d84056",
+      "message": "provenance:github:example/research-agent:a7f3c1e9b2d84056",
+      "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "signature": "HV/AjVj/53ZIMZkyR5Ov1p8z6t3ZkZoHlr1bgePlQRXYWCTxzKJvHfmQgI78HCmYeMSf5OaW+GcIXOUQcLhGAw==",
+      "expect": "valid"
+    },
+    {
+      "id": "revocation-signature-valid",
+      "purpose": "owner-signed revocation of a provenance id",
+      "message_template": "<provenance_id>:REVOKE",
+      "message": "provenance:github:example/research-agent:REVOKE",
+      "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "signature": "GPnNOjmVhk4Wxlq3M1KUiyAlI6nkwhq5/SeXQiRkhuLMnuLwJ0qywdlP4CpvgorGLRjP9pUfLSBLOD6Mc5E/Bw==",
+      "expect": "valid"
+    },
+    {
+      "id": "identity-signature-wrong-key",
+      "purpose": "signature made by a different private key must not verify",
+      "message": "provenance:github:example/research-agent:MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "signature": "BqgcrtjZf2KS0p4zQwq/GA/c6jLNyx+PjOEVEZuvMC/1+kHlT4QLv7KuXWCR5vWB6mb+ap79effgYooumTnXCg==",
+      "expect": "invalid"
+    },
+    {
+      "id": "identity-signature-tampered-id",
+      "purpose": "the provenance id was altered after signing",
+      "message": "provenance:github:attacker/fork:MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "signature": "TCnS9o9yiDboy3SFlG65ThO6IDAhv09rlrDWOdvX2xZj3uAI5efbIw8xIXHxErtcaJAtg3BtDvXX+bv5RhLIDQ==",
+      "expect": "invalid"
+    },
+    {
+      "id": "identity-signature-substituted-key",
+      "purpose": "public_key swapped for another key \u2014 re-hosting attack",
+      "message": "provenance:github:example/research-agent:MCowBQYDK2VwAyEAm2AoU5BzkoMKTs+tjy8LIPu9FjivA0UbnnhekU5OK48=",
+      "public_key": "MCowBQYDK2VwAyEAm2AoU5BzkoMKTs+tjy8LIPu9FjivA0UbnnhekU5OK48=",
+      "signature": "TCnS9o9yiDboy3SFlG65ThO6IDAhv09rlrDWOdvX2xZj3uAI5efbIw8xIXHxErtcaJAtg3BtDvXX+bv5RhLIDQ==",
+      "expect": "invalid"
+    },
+    {
+      "id": "identity-signature-malformed",
+      "purpose": "signature is not valid base64 of a 64-byte signature",
+      "message": "provenance:github:example/research-agent:MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "public_key": "MCowBQYDK2VwAyEAfKySY8lFCvOXFoTg1nagyZKUYYvAKW+2GvYh+oD9460=",
+      "signature": "not-a-signature",
+      "expect": "invalid",
+      "note": "Implementations may either return invalid or raise an error while decoding. Both are conformant; the requirement is that it must not verify."
+    }
+  ]
+}

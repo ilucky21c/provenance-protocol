@@ -1,9 +1,29 @@
 # provenance-protocol
 
-SDK for querying the [Provenance](https://getprovenance.dev) agent identity index.
+The Provenance Protocol: an open standard for declaring and verifying AI agent
+identity — and the reference SDK that implements it.
 
-Drop this into any receiving system — marketplace, API, agent orchestrator —
-to verify an AI agent's identity and trust profile before allowing it in.
+## The standard
+
+| | |
+|---|---|
+| [**SPEC.md**](./SPEC.md) | The specification. `PROVENANCE.yml`, the field reference, the capability vocabulary, signing and verification, conformance. |
+| [**schema/provenance-0.1.json**](./schema/provenance-0.1.json) | JSON Schema for validating a declaration. |
+| [**test-vectors/**](./test-vectors/) | Normative signature vectors. Pass these and you interoperate. |
+
+The specification is MIT-licensed and free to implement in any language,
+without permission or notification. A declaration can be read, validated and
+cryptographically verified **entirely offline** — no account, no API key, and
+no call to any service, this one included. Indexes, monitors and attesters are
+applications built on the standard, not part of it.
+
+## The SDK
+
+This package is one implementation. It adds what cannot be done offline:
+looking up an agent's current standing — open incidents, revocation, drift —
+before you let it in.
+
+Drop it into any receiving system — marketplace, API, agent orchestrator.
 
 ```bash
 npm install provenance-protocol

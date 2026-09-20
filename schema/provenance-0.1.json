@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://getprovenance.dev/schema/0.1.json",
+  "title": "PROVENANCE.yml",
+  "description": "Provenance Protocol v0.1 schema for AI agent identity files",
+  "type": "object",
+  "required": [
+    "provenance",
+    "name",
+    "description"
+  ],
+  "properties": {
+    "provenance": {
+      "type": "string",
+      "description": "Spec version",
+      "enum": [
+        "0.1"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for this agent",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "description": {
+      "type": "string",
+      "description": "What this agent does, in plain language",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the agent",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+.*$"
+    },
+    "model": {
+      "type": "object",
+      "description": "The LLM powering this agent",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai",
+            "google",
+            "mistral",
+            "meta",
+            "local",
+            "other"
+          ],
+          "description": "LLM provider"
+        },
+        "model_id": {
+          "type": "string",
+          "description": "Specific model ID e.g. claude-sonnet-4-5"
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "What this agent can do \u2014 standard vocabulary or domain:custom",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]*(:[a-z0-9_:-]+)?$"
+      },
+      "uniqueItems": true
+    },
+    "constraints": {
+      "type": "array",
+      "description": "Public commitments \u2014 what this agent will NEVER do",
+      "items": {
+        "type": "string",
+        "pattern": "^no:[a-z0-9_:-]+$"
+      },
+      "uniqueItems": true
+    },
+    "delegates": {
+      "type": "array",
+      "description": "Sub-agents this orchestrator spawns \u2014 required if delegate:agents capability declared",
+      "items": {
+        "type": "object",
+        "required": [
+          "provenance_id"
+        ],
+        "properties": {
+          "provenance_id": {
+            "type": "string",
+            "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket):.+$"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "skills": {
+      "type": "array",
+      "description": "External skills this agent depends on",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "skillsmp",
+              "github",
+              "npm",
+              "custom"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "description": "How this agent runs",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "task",
+            "persistent",
+            "scheduled"
+          ],
+          "description": "task: runs to completion | persistent: always on | scheduled: cron-like"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "api",
+            "webhook",
+            "schedule",
+            "event"
+          ],
+          "description": "What starts this agent"
+        }
+      },
+      "additionalProperties": false
+    },
+    "contact": {
+      "type": "object",
+      "description": "Who is responsible for this agent",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance_id": {
+      "type": "string",
+      "description": "Your Provenance identifier \u2014 links this file to your index entry",
+      "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket):.+$"
+    },
+    "identity": {
+      "type": "object",
+      "description": "Cryptographic identity. public_key alone advertises the key an agent will use to prove control live. Adding signature makes the declaration itself tamper-evident.",
+      "properties": {
+        "public_key": {
+          "type": "string",
+          "description": "Base64-encoded Ed25519 SPKI DER public key. Generate with: generateProvenanceKeyPair() from provenance-protocol/keygen"
+        },
+        "signature": {
+          "type": "string",
+          "description": "Base64 Ed25519 signature of '<provenance_id>:<public_key>' \u2014 proves you control the private key and that the declaration is unaltered. Optional: omit it when the key is published only for live challenge-response. Requires provenance_id."
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "ed25519"
+          ],
+          "description": "Signing algorithm. Always ed25519."
+        }
+      },
+      "required": [
+        "public_key"
+      ],
+      "additionalProperties": false
+    },
+    "ajp": {
+      "type": "object",
+      "description": "Agent Job Protocol endpoint \u2014 enables agent-to-agent job delegation",
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "Base URL for your AJP implementation. Must accept POST /jobs, GET /jobs/:id, POST /jobs/:id/ack"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "0.1"
+          ],
+          "description": "AJP spec version"
+        }
+      },
+      "required": [
+        "endpoint"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
