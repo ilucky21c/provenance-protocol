@@ -8,13 +8,35 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
+      # Mints the short-lived OIDC token npm trades for publish rights.
+      # Without it npm looks for a token instead and fails with a 404 on
+      # write, which reads like "package not found" rather than "not
+      # authorised". Do not remove.
       id-token: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Trusted publishing needs Node >= 22.14 and npm >= 11.5.1.
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Upgrade npm explicitly rather than trusting whatever version the
+      # runner's Node bundles, and print both. A too-old npm ignores OIDC
+      # and fails with that same misleading 404, so keep the versions in
+      # the log where they can be read.
+      - run: npm install -g npm@latest
+      - run: node -v && npm -v
+
+      # No install step: these packages have no runtime dependencies, and the
+      # tests use only Node built-ins. A release that fails its own test
+      # vectors must not reach the registry.
+      - run: npm test --if-present
+
+      # No NODE_AUTH_TOKEN: npm exchanges this workflow's OIDC identity for
+      # publish rights, configured as a trusted publisher on npmjs.com against
+      # this repository and this workflow filename. Provenance attestations are
+      # generated automatically, so --provenance is not passed.
+      - run: npm publish --access public
