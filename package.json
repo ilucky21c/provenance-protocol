@@ -1,6 +1,6 @@
 {
   "name": "provenance-protocol",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The Provenance Protocol \u2014 open standard for AI agent identity \u2014 and its reference SDK",
   "type": "module",
   "main": "./src/index.js",
