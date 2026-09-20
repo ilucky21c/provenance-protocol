@@ -17,6 +17,36 @@ cryptographically verified **entirely offline** — no account, no API key, and
 no call to any service, this one included. Indexes, monitors and attesters are
 applications built on the standard, not part of it.
 
+## Offline verification
+
+No account, no API key, no call to any service — including this one.
+
+```js
+import { verifyDeclaration } from 'provenance-protocol/verify';
+import YAML from 'yaml';
+
+const result = await verifyDeclaration(YAML.parse(fileContents), {
+  retrievedFrom: 'https://github.com/alice/research-assistant',
+});
+
+result.valid        // the signature verifies against the key in the file
+result.location     // 'match' | 'mismatch' | 'unchecked'
+result.trustworthy  // valid AND served from the location it claims
+result.fingerprint  // SHA-256 of the key — store it to detect rotation
+```
+
+A valid signature proves the declaration came from the holder of that private
+key and has not been altered. It does **not** prove who that holder is, that
+the declared capabilities are accurate, or that the declaration is current.
+That is why `trustworthy` also requires the location check: a signature is only
+the project owner's if the file was served from the project it names.
+
+Also exported: `verifyChallenge()` for live proof of key control against a key
+you already hold, `verifyRevocation()`, `checkLocation()` and `keyFingerprint()`.
+
+Declarations are YAML — parse them with whatever library you already use and
+pass the object. This module has no dependencies.
+
 ## The SDK
 
 This package is one implementation. It adds what cannot be done offline:

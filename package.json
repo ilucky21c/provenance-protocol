@@ -1,6 +1,6 @@
 {
   "name": "provenance-protocol",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "The Provenance Protocol \u2014 open standard for AI agent identity \u2014 and its reference SDK",
   "type": "module",
   "main": "./src/index.js",
@@ -16,6 +16,10 @@
     "./keygen": {
       "types": "./src/keygen.d.ts",
       "import": "./src/keygen.js"
+    },
+    "./verify": {
+      "types": "./src/verify.d.ts",
+      "import": "./src/verify.js"
     }
   },
   "files": [
@@ -23,6 +27,8 @@
     "src/index.d.ts",
     "src/keygen.js",
     "src/keygen.d.ts",
+    "src/verify.d.ts",
+    "src/verify.js",
     "src/cli.js",
     "README.md",
     "SPEC.md",
@@ -35,7 +41,10 @@
     "provenance",
     "trust",
     "llm",
-    "verification"
+    "verification",
+    "ed25519",
+    "offline-verification",
+    "standard"
   ],
   "license": "MIT",
   "repository": {
@@ -45,5 +54,8 @@
   "homepage": "https://getprovenance.dev",
   "engines": {
     "node": ">=14.0.0"
+  },
+  "scripts": {
+    "test": "node test/verify.test.mjs"
   }
 }

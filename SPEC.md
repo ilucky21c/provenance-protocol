@@ -421,6 +421,10 @@ Points 5 and 6 are what make independent implementations agree. An
 implementation that passes the test vectors interoperates with every other
 one that does, with no reference to any particular service.
 
+A reference implementation of offline verification ships in this repository as
+`provenance-protocol/verify`. It is one implementation, not the definition —
+the vectors are the definition.
+
 ---
 
 ## Implementing this specification
