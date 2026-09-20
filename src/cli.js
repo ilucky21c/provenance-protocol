@@ -1,196 +1,294 @@
 #!/usr/bin/env node
 /**
- * provenance CLI
+ * provenance — Provenance Protocol identity CLI (the `provenance` bin of provenance-protocol)
  *
- * npx provenance keygen
- * npx provenance register --id provenance:github:org/agent --url https://...
- * npx provenance status provenance:github:org/agent
- * npx provenance revoke --id provenance:github:org/agent
+ * Usage:
+ *   provenance keygen
+ *   provenance register --id <id> --url <url> [options]
+ *   provenance status <id>
+ *   provenance validate [file]
+ *   provenance revoke --id <id> [--private-key <key>]
  */
 
-import { writeFileSync, readFileSync, existsSync } from 'fs';
-import { execSync } from 'child_process';
-import { generateProvenanceKeyPair, signChallenge, signForProvenance, signRevocation } from './keygen.js';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from 'crypto';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+import { createRequire } from 'module';
 
-const API = 'https://getprovenance.dev/api/agents';
-const KEY_FILE = '.provenance-key';
+const API     = process.env.PROVENANCE_API_URL || 'https://getprovenance.dev';
+const VERSION = createRequire(import.meta.url)('../package.json').version;
 
-function readPrivateKey() {
-  if (process.env.PROVENANCE_PRIVATE_KEY) return process.env.PROVENANCE_PRIVATE_KEY.trim();
-  if (existsSync(KEY_FILE)) return readFileSync(KEY_FILE, 'utf8').trim();
-  console.error(`No private key found. Set PROVENANCE_PRIVATE_KEY or run: npx provenance keygen`);
-  process.exit(1);
-}
+// ── Colours ───────────────────────────────────────────────────────────────────
+
+const c = {
+  reset: '\x1b[0m', dim: '\x1b[2m', bold: '\x1b[1m',
+  green: '\x1b[32m', amber: '\x1b[33m', red: '\x1b[31m', white: '\x1b[97m',
+};
+const ok  = s => `${c.green}✓${c.reset} ${s}`;
+const err = s => `${c.red}✗${c.reset} ${s}`;
+const dim = s => `${c.dim}${s}${c.reset}`;
+const hi  = s => `${c.white}${c.bold}${s}${c.reset}`;
+const amb = s => `${c.amber}${s}${c.reset}`;
+
+// ── Arg parsing ───────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) {
-      args[argv[i].slice(2)] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : true;
-    } else {
-      args._ = args._ || [];
-      args._.push(argv[i]);
-    }
+  const args = { _: [] };
+  let i = 0;
+  while (i < argv.length) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next && !next.startsWith('--')) { args[key] = next; i += 2; }
+      else { args[key] = true; i++; }
+    } else { args._.push(a); i++; }
   }
   return args;
 }
 
-const [,, command, ...rest] = process.argv;
-const args = parseArgs(rest);
+// ── Crypto helpers ────────────────────────────────────────────────────────────
 
-// ── keygen ──────────────────────────────────────────────────────────────────
+function generateKeyPair() {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519', {
+    publicKeyEncoding:  { type: 'spki',  format: 'der' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'der' },
+  });
+  return {
+    publicKey:  Buffer.from(publicKey).toString('base64'),
+    privateKey: Buffer.from(privateKey).toString('base64'),
+  };
+}
 
-if (command === 'keygen') {
-  const { publicKey, privateKey } = generateProvenanceKeyPair();
+function signMessage(privateKeyBase64, message) {
+  const key = createPrivateKey({ key: Buffer.from(privateKeyBase64, 'base64'), format: 'der', type: 'pkcs8' });
+  return nodeSign(null, Buffer.from(message, 'utf8'), key).toString('base64');
+}
 
-  writeFileSync(KEY_FILE, privateKey, { mode: 0o600 });
-  try { execSync(`grep -qxF "${KEY_FILE}" .gitignore 2>/dev/null || echo "${KEY_FILE}" >> .gitignore`); } catch {}
+function derivePublicKey(privateKeyBase64) {
+  const priv = createPrivateKey({ key: Buffer.from(privateKeyBase64, 'base64'), format: 'der', type: 'pkcs8' });
+  return Buffer.from(createPublicKey(priv).export({ type: 'spki', format: 'der' })).toString('base64');
+}
 
-  console.log(`\nKeypair generated.\n`);
-  console.log(`Private key → ${KEY_FILE} (chmod 600, added to .gitignore)`);
-  console.log(`\nPublic key (add to PROVENANCE.yml):\n`);
+// ── Commands ──────────────────────────────────────────────────────────────────
+
+async function cmdKeygen() {
+  console.log(`\n${amb('Generating Ed25519 keypair...')}\n`);
+  const { publicKey, privateKey } = generateKeyPair();
+
+  console.log(`${hi('Public key')} ${dim('(add to PROVENANCE.yml identity.public_key)')}`);
+  console.log(`${c.green}${publicKey}${c.reset}\n`);
+  console.log(`${hi('Private key')} ${dim('(store as PROVENANCE_PRIVATE_KEY — never commit)')}`);
+  console.log(`${c.amber}${privateKey}${c.reset}\n`);
+  console.log(dim('─'.repeat(60)));
+  console.log(dim('Add to your environment:'));
+  console.log(`  PROVENANCE_PRIVATE_KEY=${privateKey}\n`);
+  console.log(dim('Add to PROVENANCE.yml:'));
   console.log(`  identity:`);
   console.log(`    public_key: "${publicKey}"`);
-  console.log(`    algorithm: ed25519`);
-  console.log(`\nNext: npx provenance register --id provenance:<platform>:<org>/<name>\n`);
-  process.exit(0);
+  console.log(`    algorithm: ed25519\n`);
 }
 
-// ── register ─────────────────────────────────────────────────────────────────
+async function cmdRegister(args) {
+  const id          = args.id;
+  const url         = args.url;
+  const name        = args.name;
+  const description = args.description || args.desc;
+  const caps        = args.capabilities ? args.capabilities.split(',').map(s => s.trim()) : [];
+  const cons        = args.constraints  ? args.constraints.split(',').map(s => s.trim())  : [];
+  const model       = args.model;
+  const modelId     = args['model-id'];
+  const ajpEndpoint = args['ajp-endpoint'];
+  const privateKey  = args['private-key'] || process.env.PROVENANCE_PRIVATE_KEY;
 
-if (command === 'register') {
-  const id = args.id || args._?.[0];
-  if (!id) { console.error('Usage: npx provenance register --id provenance:<platform>:<org>/<name> [options]'); process.exit(1); }
+  if (!id)  { console.error(err('--id required'));  process.exit(1); }
+  if (!url) { console.error(err('--url required')); process.exit(1); }
 
-  const privateKey = readPrivateKey();
-  const { publicKey } = (() => {
-    // derive public key from private key for display — we just use the stored one
-    // We can't derive public from private easily here, so read from PROVENANCE.yml or require --public-key
-    return { publicKey: args['public-key'] || null };
-  })();
+  console.log(`\n${amb('Registering')} ${hi(id)}...\n`);
 
-  // If no public key arg, re-generate won't work — need the stored public key
-  // Best path: require keygen was run, read public key from PROVENANCE.yml if present
-  let pubKey = args['public-key'];
-  if (!pubKey) {
-    if (existsSync('PROVENANCE.yml')) {
-      const yml = readFileSync('PROVENANCE.yml', 'utf8');
-      const match = yml.match(/public_key:\s*["']?([A-Za-z0-9+/=]+)["']?/);
-      if (match) pubKey = match[1];
-    }
+  let pubKey, signedChallenge;
+  if (privateKey) {
+    pubKey          = args['public-key'] || process.env.PROVENANCE_PUBLIC_KEY || derivePublicKey(privateKey);
+    signedChallenge = signMessage(privateKey, `${id}:REGISTER`);
+    console.log(ok('Signing with private key'));
   }
-  if (!pubKey) {
-    console.error('Public key required. Pass --public-key or add identity.public_key to PROVENANCE.yml first.');
-    process.exit(1);
-  }
-
-  const signed_challenge = signChallenge(privateKey, id, 'REGISTER');
 
   const body = {
-    provenance_id: id,
-    public_key: pubKey,
-    signed_challenge,
-    ...(args.url ? { url: args.url } : {}),
-    ...(args.name ? { name: args.name } : {}),
-    ...(args.description ? { description: args.description } : {}),
-    ...(args.capabilities ? { capabilities: args.capabilities.split(',').map(s => s.trim()) } : {}),
-    ...(args.constraints ? { constraints: args.constraints.split(',').map(s => s.trim()) } : {}),
-    ...(args.model ? { model_provider: args.model } : {}),
-    ...(args['model-id'] ? { model_id: args['model-id'] } : {}),
+    provenance_id: id, url,
+    ...(name        && { name }),
+    ...(description && { description }),
+    ...(caps.length && { capabilities: caps }),
+    ...(cons.length && { constraints: cons }),
+    ...(model       && { model_provider: model }),
+    ...(modelId     && { model_id: modelId }),
+    ...(ajpEndpoint && { ajp_endpoint: ajpEndpoint }),
+    ...(pubKey      && { public_key: pubKey }),
+    ...(signedChallenge && { signed_challenge: signedChallenge }),
   };
 
+  const res  = await fetch(`${API}/api/agents/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json();
+
+  if (!res.ok) { console.error(err(data.error || `HTTP ${res.status}`)); process.exit(1); }
+
+  const agent = data.agent || data;
+  console.log(ok(data.created ? 'Agent registered' : 'Agent updated'));
+  console.log(`  ${dim('confidence:')}      ${c.green}${agent.confidence}${c.reset}`);
+  console.log(`  ${dim('identity_verified:')} ${agent.identity_verified ? c.green + 'true' : c.amber + 'false'}${c.reset}`);
+  if (ajpEndpoint) console.log(`  ${dim('ajp_endpoint:')}    ${ajpEndpoint}`);
+  if (!agent.identity_verified)
+    console.log(`\n${c.amber}Tip:${c.reset} Run with ${hi('--private-key')} to get identity_verified status`);
+  console.log();
+}
+
+async function cmdStatus(args) {
+  const id = args._[1];
+  if (!id) { console.error(err('Usage: provenance status <provenance_id>')); process.exit(1); }
+
+  console.log(`\n${amb('Checking')} ${hi(id)}...\n`);
+
+  const res  = await fetch(`${API}/api/agent/${id.replace('provenance:', '').replace(':', '/')}`);
+  const data = await res.json();
+
+  if (!res.ok || data.error) { console.error(err(data.error || 'Not found')); process.exit(1); }
+
+  const trust      = Math.round((data.confidence || 0) * 100);
+  const trustColor = trust >= 80 ? c.green : trust >= 50 ? c.amber : c.red;
+
+  console.log(`${hi(data.name || id)}`);
+  console.log(`${dim(data.provenance_id)}\n`);
+  console.log(`${dim('Trust score:')}       ${trustColor}${trust}/100${c.reset}`);
+  console.log(`${dim('Declared:')}          ${data.declared ? c.green + 'yes' : c.amber + 'no'}${c.reset}`);
+  console.log(`${dim('Identity verified:')} ${data.identity_verified ? c.green + 'yes' : c.amber + 'no'}${c.reset}`);
+  console.log(`${dim('AJP endpoint:')}      ${data.ajp?.endpoint ? c.green + data.ajp.endpoint : c.dim + 'not set'}${c.reset}`);
+  console.log(`${dim('Incidents:')}         ${(data.incident_count || 0) === 0 ? c.green + '0' : c.red + data.incident_count}${c.reset}`);
+  if (data.capabilities?.length) console.log(`${dim('Capabilities:')}      ${data.capabilities.join(', ')}`);
+  if (data.constraints?.length)  console.log(`${dim('Constraints:')}       ${data.constraints.join(', ')}`);
+
+  console.log();
+  for (const [pass, label] of [
+    [data.declared,                'PROVENANCE.yml declared'],
+    [data.identity_verified,       'Identity verified (Ed25519)'],
+    [!!data.ajp?.endpoint,         'AJP endpoint configured'],
+    [(data.incident_count||0)===0, 'No open incidents'],
+  ]) console.log(`  ${pass ? ok(label) : dim('○ ' + label)}`);
+  console.log();
+}
+
+async function cmdValidate(args) {
+  const file = args._[1] || 'PROVENANCE.yml';
+  const path = resolve(process.cwd(), file);
+  if (!existsSync(path)) { console.error(err(`File not found: ${path}`)); process.exit(1); }
+
+  console.log(`\n${amb('Validating')} ${hi(file)}...\n`);
+  const content = readFileSync(path, 'utf8');
+
+  // "Could not check" and "checked, and it is invalid" must not look alike:
+  // this runs in CI, where a validator that cannot reach the service and
+  // reports failure would be indistinguishable from a broken declaration.
+  // Transport trouble exits 2; a genuinely invalid file exits 1.
+  let data;
   try {
-    const res = await fetch(`${API}/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    const res = await fetch(`${API}/api/mcp`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+        params: { name: 'validate_provenance_yml', arguments: { content } } }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      console.error(`\nRegistration failed: ${data.error}`);
-      if (data.hint) console.error(`Hint: ${data.hint}`);
-      process.exit(1);
-    }
-    console.log(`\n${data.created ? 'Registered' : 'Updated'}: ${id}`);
-    console.log(`identity: ${data.agent?.identity}`);
-    console.log(`profile:  https://getprovenance.dev/agent/${id.replace('provenance:', '').replace(':', '/')}\n`);
+    if (!res.ok) throw new Error(`validation service returned HTTP ${res.status}`);
+    const rpc = await res.json();
+    const text = rpc.result?.content?.[0]?.text;
+    if (!text) throw new Error('validation service returned no result');
+    data = JSON.parse(text);
+    if (typeof data.valid !== 'boolean') throw new Error('validation service returned no verdict');
   } catch (e) {
-    console.error('Network error:', e.message);
-    process.exit(1);
+    console.error(err(`Could not validate: ${e.message}`));
+    console.error(dim(`The file was not checked. This is not a validation failure.`));
+    console.log();
+    process.exit(2);
   }
-  process.exit(0);
+
+  if (data.valid) console.log(ok('Valid PROVENANCE.yml'));
+  else { console.log(err('Validation failed')); for (const e of data.errors || []) console.log(`  ${c.red}✗${c.reset} ${e}`); }
+  for (const w of data.warnings || []) console.log(`  ${c.amber}⚠${c.reset} ${w}`);
+  console.log();
+
+  // Exit non-zero so `provenance validate` can gate a pipeline. It previously
+  // exited 0 on an invalid file, which made every CI check that used it pass.
+  if (!data.valid) process.exit(1);
 }
 
-// ── status ───────────────────────────────────────────────────────────────────
+async function cmdRevoke(args) {
+  const id         = args.id;
+  const privateKey = args['private-key'] || process.env.PROVENANCE_PRIVATE_KEY;
+  if (!id)         { console.error(err('--id required')); process.exit(1); }
+  if (!privateKey) { console.error(err('--private-key or PROVENANCE_PRIVATE_KEY required')); process.exit(1); }
 
-if (command === 'status') {
-  const id = args._?.[0] || args.id;
-  if (!id) { console.error('Usage: npx provenance status <provenance_id>'); process.exit(1); }
+  console.log(`\n${c.red}Revoking identity for${c.reset} ${hi(id)}...\n`);
 
-  try {
-    const res = await fetch(`${API}/register?provenance_id=${encodeURIComponent(id)}`);
-    const data = await res.json();
-    if (!data.registered) { console.log(`\nNot registered: ${id}\n`); process.exit(0); }
-    const a = data.agent;
-    console.log(`\n${id}`);
-    console.log(`name:     ${a.name || '—'}`);
-    console.log(`identity: ${a.identity}`);
-    console.log(`status:   ${a.status}`);
-    console.log(`profile:  https://getprovenance.dev/agent/${id.replace('provenance:', '').replace(':', '/')}\n`);
-  } catch (e) {
-    console.error('Network error:', e.message);
-    process.exit(1);
-  }
-  process.exit(0);
+  const res  = await fetch(`${API}/api/agents/revoke`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provenance_id: id, signed_challenge: signMessage(privateKey, `${id}:REVOKE`) }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) { console.error(err(data.error || `HTTP ${res.status}`)); process.exit(1); }
+
+  console.log(ok('Identity revoked'));
+  console.log(dim('Run `provenance register` with a new keypair to re-establish.\n'));
 }
 
-// ── revoke ───────────────────────────────────────────────────────────────────
+function cmdHelp() {
+  console.log(`
+${hi('provenance')} ${dim(`v${VERSION}`)} — Provenance Protocol identity CLI
 
-if (command === 'revoke') {
-  const id = args.id || args._?.[0];
-  if (!id) { console.error('Usage: npx provenance revoke --id <provenance_id>'); process.exit(1); }
+${amb('Commands:')}
+  ${hi('keygen')}                              Generate an Ed25519 keypair
+  ${hi('register')}  --id <id> --url <url>     Register or update your agent
+               [--name <name>]
+               [--description <text>]
+               [--capabilities read:web,write:code]
+               [--constraints no:pii,no:financial:transact]
+               [--model anthropic] [--model-id claude-sonnet-4-6]
+               [--ajp-endpoint <url>]
+               [--private-key <key>]
+  ${hi('status')}    <provenance_id>            Check trust score and checklist
+  ${hi('validate')}  [file]                     Validate PROVENANCE.yml (default: ./PROVENANCE.yml)
+  ${hi('revoke')}    --id <id>                  Revoke cryptographic identity
+               [--private-key <key>]
 
-  const privateKey = readPrivateKey();
-  const signed_challenge = signRevocation(privateKey, id);
+${amb('Environment variables:')}
+  PROVENANCE_ID           Your agent's Provenance ID
+  PROVENANCE_PRIVATE_KEY  Your Ed25519 private key (base64 PKCS8 DER)
+  PROVENANCE_API_URL      Override API base (default: https://getprovenance.dev)
 
-  try {
-    const res = await fetch(`${API}/revoke`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provenance_id: id, signed_challenge }),
-    });
-    const data = await res.json();
-    if (!res.ok) { console.error(`Revocation failed: ${data.error}`); process.exit(1); }
-    console.log(`\nKey revoked for ${id}.`);
-    console.log(`Run npx provenance keygen && npx provenance register --id ${id} to re-register with a new key.\n`);
-  } catch (e) {
-    console.error('Network error:', e.message);
-    process.exit(1);
-  }
-  process.exit(0);
-}
+${amb('For AJP job delegation:')}
+  ${dim('npm install -g ajp-cli')}
+  ${dim('npx ajp hire <id> --instruction "..."')}
 
-// ── help ─────────────────────────────────────────────────────────────────────
-
-console.log(`
-provenance <command>
-
-  keygen                          Generate an Ed25519 keypair
-  register --id <id> [options]    Register or update your agent
-  status <id>                     Check registration status
-  revoke --id <id>                Revoke your registered key
-
-register options:
-  --id           provenance:<platform>:<org>/<name>  (required)
-  --url          URL to your PROVENANCE.yml (for independent verification)
-  --name         Agent display name
-  --description  One-sentence description
-  --capabilities read:web,write:summaries
-  --constraints  no:pii,no:financial:transact
-  --model        anthropic / openai / etc.
-  --model-id     claude-sonnet-4-6 / gpt-4o / etc.
-  --public-key   Base64 public key (auto-read from PROVENANCE.yml if present)
-
-Full docs: https://getprovenance.dev/docs
+${amb('Examples:')}
+  provenance keygen
+  provenance register --id provenance:github:alice/my-agent --url https://github.com/alice/my-agent
+  provenance status provenance:github:alice/my-agent
+  provenance validate
 `);
-process.exit(0);
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+const argv = process.argv.slice(2);
+const args = parseArgs(argv);
+const cmd  = args._[0];
+
+try {
+  if (!cmd || cmd === 'help' || args.help) cmdHelp();
+  else if (cmd === 'keygen')   await cmdKeygen();
+  else if (cmd === 'register') await cmdRegister(args);
+  else if (cmd === 'status')   await cmdStatus(args);
+  else if (cmd === 'validate') await cmdValidate(args);
+  else if (cmd === 'revoke')   await cmdRevoke(args);
+  else { console.error(err(`Unknown command: ${cmd}\nRun \`provenance help\` for usage.`)); process.exit(1); }
+} catch (e) {
+  console.error(err(e.message));
+  process.exit(1);
+}

@@ -264,11 +264,11 @@ await fetch('https://getprovenance.dev/api/agents/revoke', {
 ## CLI
 
 ```bash
-npx provenance keygen
-npx provenance register --id provenance:github:your-org/your-agent --url https://github.com/...
-npx provenance status provenance:github:alice/my-agent
-npx provenance validate PROVENANCE.yml
-npx provenance revoke --id provenance:github:your-org/your-agent
+npx provenance-protocol keygen
+npx provenance-protocol register --id provenance:github:your-org/your-agent --url https://github.com/...
+npx provenance-protocol status provenance:github:alice/my-agent
+npx provenance-protocol validate PROVENANCE.yml
+npx provenance-protocol revoke --id provenance:github:your-org/your-agent
 ```
 
 Full CLI reference: [getprovenance.dev/docs#cli](https://getprovenance.dev/docs#cli)
