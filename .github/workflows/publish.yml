@@ -30,9 +30,14 @@ jobs:
       - run: npm install -g npm@latest
       - run: node -v && npm -v
 
-      # No install step: these packages have no runtime dependencies, and the
-      # tests use only Node built-ins. A release that fails its own test
-      # vectors must not reach the registry.
+      # Install before testing. Not every package here is dependency-free —
+      # ajp-protocol depends on provenance-protocol and its tests import it, and
+      # omitting this step made the test fail to resolve the module rather than
+      # fail a real assertion. `npm install` rather than `npm ci` because these
+      # packages carry no lockfile.
+      - run: npm install --no-audit --no-fund
+
+      # A release that fails its own tests must not reach the registry.
       - run: npm test --if-present
 
       # No NODE_AUTH_TOKEN: npm exchanges this workflow's OIDC identity for
