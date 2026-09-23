@@ -25,7 +25,7 @@
  */
 
 import { generateKeyPairSync, sign, createPrivateKey } from 'crypto';
-import { declarationSigningPayload } from './canonical.js';
+import { declarationSigningPayload, challengePayload, revocationPayload } from './canonical.js';
 
 /**
  * Generate a new Ed25519 keypair for use with Provenance identity.
@@ -58,7 +58,12 @@ export function generateProvenanceKeyPair() {
 }
 
 /**
- * Sign a challenge from a receiving system.
+ * Sign a challenge from a receiving system — LEGACY, spec 0.1 form.
+ *
+ * Signs "<provenanceId>:<nonce>", which is indistinguishable from a revocation
+ * when the nonce is "REVOKE". NEVER expose an endpoint that calls this with a
+ * caller-supplied nonce: a stranger can use it to revoke your key. Use
+ * `signAgentChallenge` instead.
  *
  * Call this when a receiving system sends you a nonce to prove your identity.
  * The signed message is always `${provenanceId}:${nonce}` — this binds the
@@ -149,6 +154,47 @@ export function signRevocation(privateKeyBase64, provenanceId) {
  * @param {object} declaration       Parsed declaration; identity.signature is ignored
  * @returns {string}                 Base64 signature — put it in identity.signature
  */
+function _sign(privateKeyBase64, message) {
+  const privateKey = createPrivateKey({
+    key: Buffer.from(privateKeyBase64, 'base64'),
+    format: 'der',
+    type: 'pkcs8',
+  });
+  return sign(null, Buffer.from(message, 'utf8'), privateKey).toString('base64');
+}
+
+/**
+ * Prove live control of a key against a nonce — domain-separated form.
+ *
+ * Use this for any endpoint a stranger can call. The legacy `signChallenge`
+ * signs "<provenanceId>:<nonce>", which is the same shape as a revocation with
+ * nonce "REVOKE" — so exposing that publicly lets a caller obtain a valid
+ * revocation signature for your own key and revoke you. This form cannot be
+ * confused with a revocation or a declaration whatever nonce is supplied.
+ *
+ * @param {string} privateKeyBase64
+ * @param {string} provenanceId
+ * @param {string} nonce            Single-use and unpredictable
+ * @returns {string}                Base64 signature
+ */
+export function signAgentChallenge(privateKeyBase64, provenanceId, nonce) {
+  return _sign(privateKeyBase64, challengePayload(provenanceId, nonce));
+}
+
+/**
+ * Revoke a provenance id — domain-separated form.
+ *
+ * Takes no caller-supplied input, so it cannot be produced by a challenge
+ * endpoint however it is called.
+ *
+ * @param {string} privateKeyBase64
+ * @param {string} provenanceId
+ * @returns {string}                Base64 signature
+ */
+export function signAgentRevocation(privateKeyBase64, provenanceId) {
+  return _sign(privateKeyBase64, revocationPayload(provenanceId));
+}
+
 export function signDeclaration(privateKeyBase64, declaration) {
   const keyBuffer = Buffer.from(privateKeyBase64, 'base64');
   const privateKey = createPrivateKey({ key: keyBuffer, format: 'der', type: 'pkcs8' });

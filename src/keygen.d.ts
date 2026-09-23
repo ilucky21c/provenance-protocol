@@ -61,3 +61,15 @@ export function signRevocation(privateKeyBase64: string, provenanceId: string): 
  * @returns Base64 signature — put it in identity.signature
  */
 export function signDeclaration(privateKeyBase64: string, declaration: object): string;
+
+/**
+ * Prove live control of a key against a nonce — domain-separated form.
+ *
+ * Use this for any endpoint a stranger can call. The legacy `signChallenge`
+ * signs the same payload shape as a revocation, so exposing that publicly lets
+ * a caller obtain a valid revocation signature for your own key.
+ */
+export function signAgentChallenge(privateKeyBase64: string, provenanceId: string, nonce: string): string;
+
+/** Revoke a provenance id — domain-separated form. Takes no caller-supplied input. */
+export function signAgentRevocation(privateKeyBase64: string, provenanceId: string): string;

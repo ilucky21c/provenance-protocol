@@ -93,3 +93,16 @@ export function verifyRevocation(
   provenanceId: string,
   signatureBase64: string
 ): Promise<boolean>;
+
+/**
+ * Verify a live challenge response — domain-separated form. Prefer this over
+ * `verifyChallenge`, whose payload is indistinguishable from a revocation.
+ */
+export function verifyAgentChallenge(
+  publicKeyBase64: string, provenanceId: string, nonce: string, signatureBase64: string
+): Promise<boolean>;
+
+/** Verify a revocation — domain-separated form. */
+export function verifyAgentRevocation(
+  publicKeyBase64: string, provenanceId: string, signatureBase64: string
+): Promise<boolean>;

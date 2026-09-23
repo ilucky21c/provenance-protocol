@@ -20,14 +20,50 @@
  *     silently coerced into an ambiguous signature
  */
 
-const DOMAIN = 'provenance-declaration-v1';
-
 /** Thrown when a declaration contains something that cannot be canonicalised. */
 export class CanonicalError extends Error {
   constructor(message) {
     super(message);
     this.name = 'CanonicalError';
   }
+}
+
+const DOMAIN = 'provenance-declaration-v1';
+
+/**
+ * Every distinct thing an agent key signs gets its own prefix, so a signature
+ * obtained for one purpose can never be presented as another.
+ *
+ * This is not theoretical. Spec 0.1 signed a challenge as "<id>:<nonce>" and a
+ * revocation as "<id>:REVOKE" — the same payload with a chosen nonce. Any
+ * publicly reachable endpoint that signs a caller-supplied nonce therefore
+ * hands out valid revocation signatures for its own key, letting a stranger
+ * revoke the agent. A key lifted into the nonce likewise reproduces the 0.1
+ * declaration payload.
+ *
+ * The separated forms below cannot be confused with each other whatever the
+ * caller supplies.
+ */
+export const CHALLENGE_DOMAIN = 'provenance-challenge-v1';
+export const REVOCATION_DOMAIN = 'provenance-revocation-v1';
+
+/** Payload for proving live control of a key. Nonce must be single-use. */
+export function challengePayload(provenanceId, nonce) {
+  if (typeof provenanceId !== 'string' || provenanceId.length === 0) {
+    throw new CanonicalError('provenanceId is required');
+  }
+  if (typeof nonce !== 'string' || nonce.length === 0) {
+    throw new CanonicalError('nonce is required');
+  }
+  return `${CHALLENGE_DOMAIN}:${provenanceId}:${nonce}`;
+}
+
+/** Payload for revoking a provenance id. Carries no caller-supplied input. */
+export function revocationPayload(provenanceId) {
+  if (typeof provenanceId !== 'string' || provenanceId.length === 0) {
+    throw new CanonicalError('provenanceId is required');
+  }
+  return `${REVOCATION_DOMAIN}:${provenanceId}`;
 }
 
 function canonicalValue(value, path = '$') {

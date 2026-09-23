@@ -16,7 +16,7 @@
  * Uses the Web Crypto API (crypto.subtle): all modern browsers, Node 18+.
  */
 
-import { declarationSigningPayload } from './canonical.js';
+import { declarationSigningPayload, challengePayload, revocationPayload } from './canonical.js';
 
 /** Signature algorithm. Ed25519 in every spec version so far. */
 const ALGORITHM = 'ed25519';
@@ -283,7 +283,51 @@ export async function verifyDeclaration(declaration, options = {}) {
 }
 
 /**
+ * Verify a live challenge response — domain-separated form.
+ *
+ * Pair with `signAgentChallenge`. Prefer this over `verifyChallenge`: the legacy
+ * payload is the same shape as a revocation, so any public endpoint signing it
+ * is a way to revoke the agent's own key.
+ *
+ * @param {string} publicKeyBase64
+ * @param {string} provenanceId
+ * @param {string} nonce            Single-use, unpredictable
+ * @param {string} signatureBase64
+ * @returns {Promise<boolean>}
+ */
+export async function verifyAgentChallenge(publicKeyBase64, provenanceId, nonce, signatureBase64) {
+  try {
+    return await verifyEd25519(publicKeyBase64, signatureBase64, challengePayload(provenanceId, nonce));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verify a revocation — domain-separated form.
+ *
+ * Confirms it came from the key holder. It does not tell you whether a
+ * revocation exists; that requires asking an index.
+ *
+ * @param {string} publicKeyBase64
+ * @param {string} provenanceId
+ * @param {string} signatureBase64
+ * @returns {Promise<boolean>}
+ */
+export async function verifyAgentRevocation(publicKeyBase64, provenanceId, signatureBase64) {
+  try {
+    return await verifyEd25519(publicKeyBase64, signatureBase64, revocationPayload(provenanceId));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Verify a live challenge response offline, against a key you already hold.
+ *
+ * LEGACY (spec 0.1 payload). Accepts "<provenanceId>:<nonce>", which is the same
+ * shape as a revocation with nonce "REVOKE" — so never verify against a peer
+ * that exposes this form publicly. Use `verifyAgentChallenge`.
  *
  * The network equivalent in the main SDK looks the key up in the index; this
  * takes the key directly, so a system that already stores keys can verify

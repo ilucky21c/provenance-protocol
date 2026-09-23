@@ -408,27 +408,49 @@ This is the same division of labour as a machine-readable passport: the
 document proves its own integrity offline, while identity binding and
 current standing are looked up.
 
+### Every signed payload is domain-separated
+
+An agent's key signs several different things. Each payload MUST carry the
+prefix for its purpose, so that a signature obtained for one purpose can never
+be presented as another:
+
+| Purpose | Signed payload |
+|---|---|
+| Declaration (0.2) | `provenance-declaration-v1:<canonical JSON>` |
+| Live proof of key control | `provenance-challenge-v1:<provenance_id>:<nonce>` |
+| Revocation | `provenance-revocation-v1:<provenance_id>` |
+
+This is not a precaution against something hypothetical. In 0.1 a challenge was
+signed as `<provenance_id>:<nonce>` and a revocation as
+`<provenance_id>:REVOKE` — **the same payload with a chosen nonce.** Any
+publicly reachable endpoint that signs a caller-supplied nonce in the 0.1 form
+therefore hands out valid revocation signatures for its own key, and a stranger
+can revoke the agent. Supplying the public key as the nonce likewise reproduces
+the 0.1 declaration signature.
+
+An endpoint that signs a caller-supplied value MUST use the separated challenge
+form, and MUST NOT sign the 0.1 payload. Verifiers SHOULD require the separated
+form from any agent that exposes a public challenge endpoint.
+
+The 0.1 payloads remain defined so existing deployments keep working, but they
+are unsafe to expose and are superseded.
+
 ### Live proof of key control
 
 A signature on a file proves the file's origin. It does not prove that the
-agent running right now controls that key. For that, a receiving system
-issues a nonce and the agent returns a signature over:
+agent running right now controls that key. For that, a receiving system issues
+a nonce and the agent returns a signature over
+`provenance-challenge-v1:<provenance_id>:<nonce>`.
 
-```
-<provenance_id>:<nonce>
-```
-
-Nonces must be single-use and unpredictable. The receiving system verifies
-the signature against the public key it already holds for that
-`provenance_id`.
+Nonces must be single-use and unpredictable. The receiving system verifies the
+signature against the public key it already holds for that `provenance_id`.
 
 ### Revocation
 
-A key holder revokes a `provenance_id` by signing:
-
-```
-<provenance_id>:REVOKE
-```
+A key holder revokes a `provenance_id` by signing
+`provenance-revocation-v1:<provenance_id>`. The payload contains no
+caller-supplied input, so it cannot be produced by a challenge endpoint however
+that endpoint is called.
 
 Revocation is the one operation that cannot be verified offline — a verifier
 has no way to know a revocation has been issued without asking. Implementations

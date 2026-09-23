@@ -1,6 +1,6 @@
 {
   "name": "provenance-protocol",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "The Provenance Protocol \u2014 open standard for AI agent identity \u2014 and its reference SDK",
   "type": "module",
   "main": "./src/index.js",
@@ -58,6 +58,6 @@
     "node": ">=14.0.0"
   },
   "scripts": {
-    "test": "node test/verify.test.mjs && node test/declaration-signature.test.mjs"
+    "test": "node test/verify.test.mjs && node test/declaration-signature.test.mjs && node test/payload-separation.test.mjs"
   }
 }
