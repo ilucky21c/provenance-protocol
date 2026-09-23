@@ -131,6 +131,26 @@ export function checkLocation(provenanceId, retrievedFrom) {
     return 'unchecked';
   }
 
+  // provenance:domain:<hostname>[/<path>] — for an agent that runs as a service
+  // and has no public repository. Control is proven the same way as with a
+  // repo: whoever put the file there had write access to the location. Most
+  // commercial agents are this shape, so without it they could never be
+  // verified as their operator's.
+  if (id.platform === 'domain') {
+    const [declaredHost, ...declaredPath] = id.path.split('/').filter(Boolean);
+    if (!declaredHost) return 'unchecked';
+    // Exact host match. A subdomain is a different party as far as this is
+    // concerned, and treating it as the same would be the whole attack.
+    if (url.hostname.toLowerCase() !== declaredHost.toLowerCase()) return 'mismatch';
+    if (declaredPath.length === 0) return 'match';
+    const segs = url.pathname.split('/').filter(Boolean).map((x) => x.toLowerCase());
+    const want = declaredPath.map((x) => x.toLowerCase());
+    for (let i = 0; i + want.length <= segs.length; i++) {
+      if (want.every((part, j) => segs[i + j] === part)) return 'match';
+    }
+    return 'mismatch';
+  }
+
   const platform = HOST_PLATFORMS.find(([host]) => host.test(url.hostname))?.[1];
   if (!platform) return 'unchecked';
   if (platform !== id.platform) return 'mismatch';

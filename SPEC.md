@@ -251,7 +251,29 @@ provenance:npm:@scope/package-name
 provenance:pypi:package-name
 provenance:huggingface:owner/space-name
 provenance:clawmarket:listing-id
+provenance:domain:agent.example.com
+provenance:domain:example.com/agents/research
 ```
+
+### Domain identifiers
+
+`provenance:domain:<hostname>` is for an agent that runs as a service and has no
+public repository — which is most commercial agents. Control is proven exactly as
+it is for a repository: the declaration is served from the location the
+identifier names, and only someone with write access to that location could have
+put it there.
+
+The hostname must match exactly. A subdomain is a different party for this
+purpose, and treating `agent.example.com` as covered by `example.com` would be
+the whole attack.
+
+Optional path segments allow several agents under one domain — those segments
+must appear in the retrieval path.
+
+Without this form, a hosted service serving its own declaration could never be
+verified as its operator's: the signature would check out while the location
+check reported `unchecked`, so no verifier could conclude the declaration was
+genuinely theirs.
 
 Add `provenance_id` to your PROVENANCE.yml to link your file to your
 index entry and claim your agent profile.
