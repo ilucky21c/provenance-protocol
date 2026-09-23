@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://getprovenance.dev/schema/0.1.json",
+  "$id": "https://getprovenance.dev/schema/0.2.json",
   "title": "PROVENANCE.yml",
-  "description": "Provenance Protocol v0.1 schema for AI agent identity files",
+  "description": "Provenance Protocol v0.2 schema for AI agent identity files",
   "type": "object",
   "required": [
     "provenance",
@@ -12,9 +12,9 @@
   "properties": {
     "provenance": {
       "type": "string",
-      "description": "Spec version",
+      "description": "Spec version. 0.2 signs the whole declaration.",
       "enum": [
-        "0.1"
+        "0.2"
       ]
     },
     "name": {
@@ -179,7 +179,7 @@
     },
     "identity": {
       "type": "object",
-      "description": "Cryptographic identity. public_key alone advertises the key an agent will use to prove control live. Adding signature makes the declaration itself tamper-evident.",
+      "description": "Cryptographic identity. public_key alone advertises the key an agent will use to prove control live. Adding signature makes the entire declaration tamper-evident.",
       "properties": {
         "public_key": {
           "type": "string",
@@ -187,7 +187,7 @@
         },
         "signature": {
           "type": "string",
-          "description": "Base64 Ed25519 signature of '<provenance_id>:<public_key>' \u2014 proves you control the private key under that identity. NOTE: in 0.1 it does NOT cover the rest of the declaration, so capabilities and constraints are not protected by it; spec 0.2 signs the whole declaration. Optional: omit it when the key is published only for live challenge-response. Requires provenance_id."
+          "description": "Base64 Ed25519 signature over 'provenance-declaration-v1:' followed by the canonical JSON of this parsed declaration with identity.signature removed. Covers every field, so editing capabilities or deleting a constraint breaks it. Generate with signDeclaration() from provenance-protocol/keygen. Optional: omit when the key is published only for live challenge-response."
         },
         "algorithm": {
           "type": "string",

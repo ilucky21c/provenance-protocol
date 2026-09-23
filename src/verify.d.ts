@@ -8,6 +8,9 @@
 /** Whether a declaration was served from the location its provenance_id names. */
 export type LocationCheck = 'match' | 'mismatch' | 'unchecked';
 
+/** What a signature was found to cover, per the declaration's spec version. */
+export type SignatureCoverage = 'declaration' | 'identity';
+
 export interface VerificationResult {
   /** An identity.signature was present to check. */
   signed: boolean;
@@ -20,6 +23,13 @@ export interface VerificationResult {
   /** SHA-256 of the public key, hex. Store it to detect key rotation. */
   fingerprint: string | null;
   location: LocationCheck;
+  /**
+   * 'declaration' (spec 0.2) — every field is covered; any edit breaks it.
+   * 'identity' (spec 0.1) — only the identity and key are covered, so the
+   * declared capabilities and constraints are NOT protected by the signature.
+   * null when no signature was checked.
+   */
+  coverage: SignatureCoverage | null;
   /**
    * Signature valid AND retrieval location confirmed. Only both together
    * justify treating the declaration as the named project owner's.

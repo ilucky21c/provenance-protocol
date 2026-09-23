@@ -25,6 +25,7 @@
  */
 
 import { generateKeyPairSync, sign, createPrivateKey } from 'crypto';
+import { declarationSigningPayload } from './canonical.js';
 
 /**
  * Generate a new Ed25519 keypair for use with Provenance identity.
@@ -132,6 +133,27 @@ export function signChallenge(privateKeyBase64, provenanceId, nonce) {
  */
 export function signRevocation(privateKeyBase64, provenanceId) {
   return signChallenge(privateKeyBase64, provenanceId, 'REVOKE');
+}
+
+/**
+ * Sign a whole declaration — spec 0.2.
+ *
+ * Covers every field, so deleting a constraint or adding a capability breaks
+ * the signature. `signForProvenance` (spec 0.1) covers only the identity and
+ * key, which leaves the rest of the declaration unprotected; prefer this.
+ *
+ * Signs the canonical form of the PARSED declaration, so reformatting the file
+ * does not invalidate the signature.
+ *
+ * @param {string} privateKeyBase64  Base64 PKCS8 DER private key
+ * @param {object} declaration       Parsed declaration; identity.signature is ignored
+ * @returns {string}                 Base64 signature — put it in identity.signature
+ */
+export function signDeclaration(privateKeyBase64, declaration) {
+  const keyBuffer = Buffer.from(privateKeyBase64, 'base64');
+  const privateKey = createPrivateKey({ key: keyBuffer, format: 'der', type: 'pkcs8' });
+  const message = Buffer.from(declarationSigningPayload(declaration), 'utf8');
+  return sign(null, message, privateKey).toString('base64');
 }
 
 export function signForProvenance(privateKeyBase64, provenanceId, publicKeyBase64) {

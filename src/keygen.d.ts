@@ -46,3 +46,18 @@ export function signForProvenance(privateKeyBase64: string, provenanceId: string
  * Send the result as signed_challenge to POST /api/agents/revoke.
  */
 export function signRevocation(privateKeyBase64: string, provenanceId: string): string;
+
+/**
+ * Sign a whole declaration — spec 0.2.
+ *
+ * Covers every field, so deleting a constraint or adding a capability breaks the
+ * signature. `signForProvenance` (spec 0.1) covers only the identity and key.
+ *
+ * Signs the canonical form of the PARSED declaration, so reformatting the file
+ * does not invalidate the signature.
+ *
+ * @param privateKeyBase64  Your PROVENANCE_PRIVATE_KEY (base64 PKCS8 DER)
+ * @param declaration       Parsed declaration; identity.signature is ignored
+ * @returns Base64 signature — put it in identity.signature
+ */
+export function signDeclaration(privateKeyBase64: string, declaration: object): string;

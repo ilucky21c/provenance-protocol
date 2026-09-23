@@ -1,6 +1,6 @@
 {
   "name": "provenance-protocol",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The Provenance Protocol \u2014 open standard for AI agent identity \u2014 and its reference SDK",
   "type": "module",
   "main": "./src/index.js",
@@ -33,7 +33,9 @@
     "README.md",
     "SPEC.md",
     "schema/provenance-0.1.json",
-    "test-vectors/"
+    "test-vectors/",
+    "src/canonical.js",
+    "schema/provenance-0.2.json"
   ],
   "keywords": [
     "ai-agent",
@@ -56,6 +58,6 @@
     "node": ">=14.0.0"
   },
   "scripts": {
-    "test": "node test/verify.test.mjs"
+    "test": "node test/verify.test.mjs && node test/declaration-signature.test.mjs"
   }
 }

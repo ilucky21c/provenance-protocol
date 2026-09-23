@@ -30,9 +30,21 @@ const result = await verifyDeclaration(YAML.parse(fileContents), {
 });
 
 result.valid        // the signature verifies against the key in the file
+result.coverage     // 'declaration' (0.2) | 'identity' (0.1)
 result.location     // 'match' | 'mismatch' | 'unchecked'
 result.trustworthy  // valid AND served from the location it claims
 result.fingerprint  // SHA-256 of the key — store it to detect rotation
+```
+
+`coverage` matters. Under spec **0.2** the signature covers the whole
+declaration, so deleting a constraint breaks it. Under **0.1** it covered only
+the identity and key — the declared capabilities and constraints were *not*
+protected, and a valid 0.1 signature says nothing about whether they were
+edited. Sign new declarations with 0.2:
+
+```js
+import { signDeclaration } from 'provenance-protocol/keygen';
+declaration.identity.signature = signDeclaration(privateKey, declaration);
 ```
 
 A valid signature proves the declaration came from the holder of that private

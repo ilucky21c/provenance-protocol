@@ -1,0 +1,217 @@
+{
+  "$comment": "Normative test vectors for Provenance Protocol v0.2 declaration signatures. The signature covers the canonical form of the entire parsed declaration, excluding identity.signature itself.",
+  "spec_version": "0.2",
+  "algorithm": "ed25519",
+  "signing": {
+    "payload": "the string \"provenance-declaration-v1:\" followed by the canonical JSON of the parsed declaration with identity.signature removed",
+    "canonicalisation": "object keys sorted by code point recursively, no insignificant whitespace, applied to the PARSED value so formatting and key order do not matter"
+  },
+  "keypair": {
+    "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEICnsl5v8baf3DyJApejP5DG3cmx1xS4S5qewS1A28IMN",
+    "$comment": "Test key only. Never use in production."
+  },
+  "reference_payload": "provenance-declaration-v1:{\"capabilities\":[\"read:web\",\"write:summaries\"],\"constraints\":[\"no:pii\",\"no:financial:transact\"],\"description\":\"A bounded fixture declaration for the signing vectors.\",\"identity\":{\"algorithm\":\"ed25519\",\"public_key\":\"MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=\"},\"name\":\"Fixture Research Agent\",\"provenance\":\"0.2\",\"provenance_id\":\"provenance:github:example/research-agent\",\"version\":\"1.2.0\"}",
+  "vectors": [
+    {
+      "id": "declaration-signature-valid",
+      "expect": "valid",
+      "purpose": "a correctly signed 0.2 declaration",
+      "declaration": {
+        "provenance": "0.2",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+          "algorithm": "ed25519",
+          "signature": "LqPe4bIXfa4qRhblNfp3VXElk2gG0x5UfTaHNKJGUDNbx4tRNXnJyXZZuu3BiC58Eur2JF719MieXU+EJe2pDg=="
+        }
+      }
+    },
+    {
+      "id": "declaration-key-order-irrelevant",
+      "expect": "valid",
+      "purpose": "the same declaration with keys in a different order must still verify",
+      "declaration": {
+        "identity": {
+          "signature": "LqPe4bIXfa4qRhblNfp3VXElk2gG0x5UfTaHNKJGUDNbx4tRNXnJyXZZuu3BiC58Eur2JF719MieXU+EJe2pDg==",
+          "algorithm": "ed25519",
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98="
+        },
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "version": "1.2.0",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "name": "Fixture Research Agent",
+        "provenance": "0.2"
+      }
+    },
+    {
+      "id": "declaration-constraint-removed",
+      "expect": "invalid",
+      "purpose": "THE CASE 0.1 MISSED — deleting a declared constraint must break the signature",
+      "declaration": {
+        "provenance": "0.2",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "constraints": [
+          "no:pii"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+          "algorithm": "ed25519",
+          "signature": "LqPe4bIXfa4qRhblNfp3VXElk2gG0x5UfTaHNKJGUDNbx4tRNXnJyXZZuu3BiC58Eur2JF719MieXU+EJe2pDg=="
+        }
+      }
+    },
+    {
+      "id": "declaration-capability-added",
+      "expect": "invalid",
+      "purpose": "granting the agent a new declared power must break the signature",
+      "declaration": {
+        "provenance": "0.2",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries",
+          "financial:transact"
+        ],
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+          "algorithm": "ed25519",
+          "signature": "LqPe4bIXfa4qRhblNfp3VXElk2gG0x5UfTaHNKJGUDNbx4tRNXnJyXZZuu3BiC58Eur2JF719MieXU+EJe2pDg=="
+        }
+      }
+    },
+    {
+      "id": "declaration-key-swapped",
+      "expect": "invalid",
+      "purpose": "substituting another public key must break the signature",
+      "declaration": {
+        "provenance": "0.2",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAiuHMTpGGFwJ8XGYRofeYY0s6rV1ywTl8nmLgHj08lew=",
+          "algorithm": "ed25519",
+          "signature": "LqPe4bIXfa4qRhblNfp3VXElk2gG0x5UfTaHNKJGUDNbx4tRNXnJyXZZuu3BiC58Eur2JF719MieXU+EJe2pDg=="
+        }
+      }
+    },
+    {
+      "id": "declaration-signed-with-wrong-key",
+      "expect": "invalid",
+      "purpose": "a signature made by a different private key must not verify",
+      "declaration": {
+        "provenance": "0.2",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+          "algorithm": "ed25519",
+          "signature": "SgK3ou1XNPOTQDP+gbwvbHPcs8+21SQaxChiHT14c5mHvZ3XzNH8secDlS/fDkog7iBN0oKQrw5O7RjLr61LCw=="
+        }
+      }
+    },
+    {
+      "id": "declaration-0.1-signature-in-0.2-file",
+      "expect": "invalid",
+      "purpose": "an old identity-only signature must not satisfy 0.2",
+      "declaration": {
+        "provenance": "0.2",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+          "algorithm": "ed25519",
+          "signature": "d4/wFYKJD8AQlKVDnC+JloeW7EnYUZ1pJoSG+HkM2wH/KMKYm8Dc6bdnCCNjtEIB/EiDei4+45DMdODPd9F0Cg=="
+        }
+      }
+    },
+    {
+      "id": "declaration-unknown-spec-version",
+      "expect": "invalid",
+      "purpose": "a verifier must refuse to guess the signing rule for a version it does not know",
+      "declaration": {
+        "provenance": "9.9",
+        "name": "Fixture Research Agent",
+        "description": "A bounded fixture declaration for the signing vectors.",
+        "version": "1.2.0",
+        "capabilities": [
+          "read:web",
+          "write:summaries"
+        ],
+        "constraints": [
+          "no:pii",
+          "no:financial:transact"
+        ],
+        "provenance_id": "provenance:github:example/research-agent",
+        "identity": {
+          "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",
+          "algorithm": "ed25519",
+          "signature": "LqPe4bIXfa4qRhblNfp3VXElk2gG0x5UfTaHNKJGUDNbx4tRNXnJyXZZuu3BiC58Eur2JF719MieXU+EJe2pDg=="
+        }
+      }
+    }
+  ]
+}

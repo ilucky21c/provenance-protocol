@@ -16,8 +16,22 @@
  * Uses the Web Crypto API (crypto.subtle): all modern browsers, Node 18+.
  */
 
-/** Signature algorithm for spec v0.1. No other value is valid. */
+import { declarationSigningPayload } from './canonical.js';
+
+/** Signature algorithm. Ed25519 in every spec version so far. */
 const ALGORITHM = 'ed25519';
+
+/**
+ * Which spec versions this module knows how to verify a signature for, and what
+ * the signature covers in each.
+ *
+ *   0.1 — signs "<provenance_id>:<public_key>". Proves key control under that
+ *         identity. Does NOT cover the rest of the declaration: a constraint can
+ *         be deleted and the signature still verifies.
+ *   0.2 — signs the canonical form of the whole declaration. Any change to any
+ *         field breaks it.
+ */
+const SIGNATURE_COVERAGE = { '0.1': 'identity', '0.2': 'declaration' };
 
 function subtle() {
   const s = globalThis.crypto?.subtle;
@@ -142,10 +156,14 @@ export function checkLocation(provenanceId, retrievedFrom) {
  * when `retrievedFrom` is given — whether the file was served from the
  * location it claims.
  *
- * A valid signature proves the declaration was produced by the holder of that
- * private key and has not been altered. It does NOT prove who that holder is,
- * that the declared capabilities are accurate, or that the declaration is
- * current. Revocation and standing cannot be checked offline.
+ * What a valid signature proves depends on the spec version, and `coverage`
+ * reports which: 'declaration' (0.2) means every field is covered, so any edit
+ * breaks it; 'identity' (0.1) means only the identity and key are covered, so
+ * the declared capabilities and constraints are NOT protected by it.
+ *
+ * In neither case does a signature prove who the key holder is, that the
+ * declared capabilities are accurate, or that the declaration is current.
+ * Revocation and standing cannot be checked offline.
  *
  * @param {object} declaration  Parsed PROVENANCE.yml
  * @param {object} [options]
@@ -158,6 +176,7 @@ export function checkLocation(provenanceId, retrievedFrom) {
  *   publicKey: string | null,
  *   fingerprint: string | null,
  *   location: 'match' | 'mismatch' | 'unchecked',
+ *   coverage: 'declaration' | 'identity' | null,
  *   trustworthy: boolean
  * }>}
  */
@@ -170,6 +189,7 @@ export async function verifyDeclaration(declaration, options = {}) {
     publicKey: null,
     fingerprint: null,
     location: 'unchecked',
+    coverage: null,
     trustworthy: false,
   };
 
@@ -213,13 +233,39 @@ export async function verifyDeclaration(declaration, options = {}) {
   }
   result.signed = true;
 
-  if (!provenanceId) {
-    return { ...result, reason: 'provenance_id is required to verify a signature' };
+  const declaredVersion = typeof declaration.provenance === 'string' ? declaration.provenance : '0.1';
+  if (!provenanceId && declaredVersion === '0.1') {
+    // The 0.1 payload is built from provenance_id, so without it there is
+    // nothing to verify. A 0.2 signature covers the whole declaration and does
+    // not need it (though the location check still does).
+    return { ...result, reason: 'provenance_id is required to verify a 0.1 signature' };
+  }
+
+  // What the signature covers depends on the spec version the declaration
+  // declares, so the payload is built differently for each.
+  const specVersion = typeof declaration.provenance === 'string' ? declaration.provenance : '0.1';
+  const coverage = SIGNATURE_COVERAGE[specVersion];
+  if (!coverage) {
+    return {
+      ...result,
+      reason: `Spec version ${specVersion} is not known to this verifier — cannot check its signature`,
+    };
+  }
+  result.coverage = coverage;
+
+  let payload;
+  try {
+    payload =
+      coverage === 'declaration'
+        ? declarationSigningPayload(declaration)
+        : `${provenanceId}:${publicKey}`;
+  } catch (e) {
+    return { ...result, reason: `Declaration cannot be canonicalised: ${e.message}` };
   }
 
   let valid;
   try {
-    valid = await verifyEd25519(publicKey, signature, `${provenanceId}:${publicKey}`);
+    valid = await verifyEd25519(publicKey, signature, payload);
   } catch {
     return { ...result, reason: 'identity.signature is malformed' };
   }

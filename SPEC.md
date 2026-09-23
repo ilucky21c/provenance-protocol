@@ -1,5 +1,5 @@
 # Provenance Protocol Specification
-**Version 0.1**
+**Versions 0.1 and 0.2**
 
 ---
 
@@ -299,7 +299,7 @@ identity:
 ```
 
 `public_key` is required when `identity` is present. `algorithm` is optional
-and defaults to `ed25519`; no other value is valid in v0.1.
+and defaults to `ed25519`; no other value is valid.
 
 `signature` is optional, and its presence changes what the block means:
 
@@ -315,7 +315,35 @@ Prefer the signed form wherever the agent has a public location. A verifier
 that finds a key with no signature has learned which key to challenge, and
 nothing about whether the file has been altered.
 
-### What gets signed
+### What gets signed — and this differs by version
+
+The `provenance` field selects the rule. A verifier MUST use the rule for the
+version the declaration declares, and MUST refuse to guess for a version it does
+not know.
+
+#### 0.2 — the whole declaration (use this)
+
+The signed message is the UTF-8 encoding of:
+
+```
+provenance-declaration-v1:<canonical JSON of the declaration>
+```
+
+The canonical JSON is produced from the **parsed** declaration, with
+`identity.signature` removed — it cannot cover itself — and with object keys
+sorted by Unicode code point recursively and no insignificant whitespace.
+
+Because canonicalisation applies to the parsed value rather than the file's
+bytes, comments, indentation, quoting style and key order do not affect the
+signature. A declaration can be reformatted without re-signing. Only JSON
+representable values may be signed; a parser that yields dates or other
+non-plain objects must be made to yield strings instead.
+
+Every field is covered, so deleting a constraint or adding a capability breaks
+the signature. `provenance_id` is not required to verify a 0.2 signature, though
+the location check still needs it.
+
+#### 0.1 — the identity only (legacy)
 
 The signed message is the UTF-8 encoding of:
 
@@ -323,12 +351,18 @@ The signed message is the UTF-8 encoding of:
 <provenance_id>:<public_key>
 ```
 
-where `<public_key>` is the same base64 string that appears in
-`identity.public_key`. Concatenating the two binds the key to the identity,
-so a key lifted from one declaration cannot be replayed under a different
-`provenance_id`.
+This binds the key to the identity, so a key lifted from one declaration cannot
+be replayed under a different `provenance_id`, and it requires `provenance_id`
+to be present.
 
-Signing a declaration therefore requires `provenance_id` to be present.
+**It does not cover any other field.** A 0.1 declaration's capabilities and
+constraints are not protected by its signature: someone with write access to the
+location can delete a declared constraint and the signature still verifies.
+Location and write access are the only controls there.
+
+0.1 declarations remain readable and verifiable — nothing published stops
+working — but new declarations SHOULD use 0.2, and a verifier SHOULD report
+which coverage it checked so a reader is not misled about what was proven.
 
 ### How to verify
 
@@ -344,10 +378,12 @@ anyone.
 
 ### What verification proves — and what it does not
 
-A valid signature proves:
+A valid signature proves the declaration was produced by the holder of that
+private key, and:
 
-- the declaration was produced by the holder of that private key, and
-- not one byte of `provenance_id` or `public_key` has changed since.
+- under **0.2**, that no field of the declaration has changed since;
+- under **0.1**, only that `provenance_id` and `public_key` have not changed —
+  everything else is unprotected.
 
 A valid signature does **not** prove:
 
@@ -405,19 +441,25 @@ they would re-check any other freshness signal.
 
 An implementation of this specification is conformant if it:
 
-1. Accepts every file that validates against `schema/provenance-0.1.json`.
+1. Accepts every file that validates against the schema for its declared
+   version — `schema/provenance-0.1.json` or `schema/provenance-0.2.json`.
 2. Treats `provenance`, `name` and `description` as required and everything
    else as optional.
 3. Ignores unrecognised top-level fields rather than rejecting the file.
    Future spec versions add fields; a `0.1` reader must not break on them.
 4. Treats `identity.signature` as optional, and an unsigned `identity`
    block as advertising a key rather than attesting the file.
-5. Reproduces every signature in `test-vectors/signatures-0.1.json` marked
-   `valid`, and refuses every one marked `invalid`.
-6. Treats a declaration whose `provenance_id` does not match its retrieval
+5. Applies the signing rule for the version the declaration declares, refuses
+   to guess for an unknown version, and reports which coverage it checked —
+   a reader must not be left thinking a 0.1 signature protected the
+   declared constraints.
+6. Reproduces every signature in `test-vectors/signatures-0.1.json` and every
+   declaration in `test-vectors/declarations-0.2.json` marked `valid`, and
+   refuses every one marked `invalid`.
+7. Treats a declaration whose `provenance_id` does not match its retrieval
    location as unverified.
 
-Points 5 and 6 are what make independent implementations agree. An
+Points 6 and 7 are what make independent implementations agree. An
 implementation that passes the test vectors interoperates with every other
 one that does, with no reference to any particular service.
 
@@ -442,10 +484,22 @@ monitors, attesters — are applications of the standard, not part of it.
 
 ## Versioning
 
-The `provenance` field records which spec version you are using.
-We commit to backwards compatibility — a `0.1` file will always be
-readable regardless of future spec versions.
-New versions add fields. Existing fields are never removed.
+The `provenance` field records which spec version you are using, and it is what
+a reader uses to decide how to interpret the file.
+
+We commit to backwards compatibility: a `0.1` file will always be readable and
+verifiable, whatever later versions say. Fields are never removed.
+
+Usually a new version only adds fields. Version 0.2 is the exception so far — it
+changed what an existing field *covers*, because `identity.signature` in 0.1
+protected only the identity and left the declared capabilities and constraints
+unprotected, which was weaker than readers assumed. Rather than redefine 0.1
+under declarations already published, 0.2 defines the stronger rule and the
+`provenance` field keeps the two apart. A verifier implements both and applies
+the one the declaration asks for.
+
+Where a version changes the meaning of an existing field, it will always do so
+by declaring a new version, never by reinterpreting an old one.
 
 ---
 
