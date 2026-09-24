@@ -46,5 +46,21 @@ for (const id of ['provenance:domain:agent.example.com', 'provenance:domain:exam
   check(checkLocation(id, locateDeclaration(id)) === 'match', `located URL matches its id: ${id}`);
 }
 
+import { checkInteropLinks } from '../src/index.js';
+const L = (id, interop) => checkInteropLinks({ provenance_id: id, interop });
+let l = L('provenance:domain:agent.example.com', { a2a_agent_card: 'https://agent.example.com/.well-known/agent-card.json' });
+check(l.a2a === 'confirmed', 'A2A card on the same host → confirmed');
+l = L('provenance:domain:agent.example.com', { a2a_agent_card: 'https://famous-agent.example.org/.well-known/agent-card.json' });
+check(l.a2a === 'claimed', 'A2A card on another host → only claimed');
+l = L('provenance:domain:example.com', { mcp_registry: 'com.example/research' });
+check(l.mcp === 'confirmed', 'MCP namespace matching the domain → confirmed');
+l = L('provenance:domain:someone.vercel.app', { mcp_registry: 'app.vercel/anything' });
+check(l.mcp === 'claimed', 'subdomain claiming the parent namespace → only claimed');
+l = L('provenance:github:alice/agent', { mcp_registry: 'io.github.alice/agent' });
+check(l.mcp === 'confirmed', 'io.github.<owner> for a github id → confirmed');
+l = L('provenance:github:mallory/agent', { mcp_registry: 'io.github.alice/agent' });
+check(l.mcp === 'claimed', 'someone else\'s GitHub namespace → only claimed');
+check(L('provenance:domain:a.example', {}).a2a === 'none', 'no link → none');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -85,3 +85,9 @@ export function signAttestation(privateKeyBase64: string, attestation: object): 
 export function signAttestationWithdrawal(
   privateKeyBase64: string, issuerId: string, attestationId: string
 ): string;
+
+/**
+ * Sign a notice about your own agent. For key-rotation, sign with the OLD key
+ * so the new key arrives vouched for by the one watchers already trust.
+ */
+export function signNotice(privateKeyBase64: string, notice: object): string;

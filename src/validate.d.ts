@@ -14,3 +14,6 @@ export function validateDeclaration(declaration: unknown): ValidationResult;
 
 /** Validate a parsed attestation against the schema for its `attestation` version. */
 export function validateAttestation(attestation: unknown): ValidationResult;
+
+/** Validate a parsed notice against the schema for its `notice` version. */
+export function validateNotice(notice: unknown): ValidationResult;

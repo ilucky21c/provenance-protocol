@@ -22,6 +22,7 @@ import {
   revocationPayload,
   attestationSigningPayload,
   attestationWithdrawalPayload,
+  noticeSigningPayload,
 } from './canonical.js';
 
 /** Signature algorithm. Ed25519 in every spec version so far. */
@@ -660,4 +661,137 @@ export async function verifyAttestationWithdrawal(issuerPublicKey, issuerId, att
   } catch {
     return false;
   }
+}
+
+const NOTICE_VERSIONS = new Set(['0.1']);
+const NOTICE_EVENTS = new Set(['declaration-published', 'release', 'key-rotation', 'incident']);
+
+/**
+ * Verify a notice offline: a signed statement by an agent's operator about the
+ * agent itself.
+ *
+ * Pass the public key you already hold for the agent — normally from its
+ * verified declaration, or the key you pinned. For a `key-rotation` notice
+ * that is the OLD key: a valid rotation notice is the old key vouching for
+ * the new one, whose fingerprint is then in `newKeyFingerprint`.
+ *
+ * `status` is 'valid', 'invalid' (forged, altered, malformed, wrong key) or
+ * 'unchecked' (no key supplied, unknown version) — never confused.
+ *
+ * @param {object} notice
+ * @param {object} options
+ * @param {string} options.publicKey  Base64 SPKI DER key of the agent (the old key, for a rotation)
+ * @returns {Promise<{
+ *   status: 'valid'|'invalid'|'unchecked',
+ *   valid: boolean,
+ *   reason: string | null,
+ *   event: string | null,
+ *   provenanceId: string | null,
+ *   newKeyFingerprint: string | null
+ * }>}
+ */
+export async function verifyNotice(notice, options = {}) {
+  const out = (status, reason, extra = {}) => ({
+    status, valid: status === 'valid', reason, event: null, provenanceId: null, newKeyFingerprint: null, ...extra,
+  });
+  if (notice === null || typeof notice !== 'object' || Array.isArray(notice)) {
+    return out('invalid', 'Notice must be a parsed object');
+  }
+  const n = notice;
+  const facts = {
+    event: typeof n.event === 'string' ? n.event : null,
+    provenanceId: typeof n.provenance_id === 'string' ? n.provenance_id : null,
+  };
+  if (!NOTICE_VERSIONS.has(n.notice)) {
+    return out('unchecked', `Notice version ${n.notice ?? '(missing)'} is not known to this verifier`, facts);
+  }
+
+  const missing = [];
+  if (typeof n.id !== 'string' || !n.id) missing.push('id');
+  if (!facts.event || !NOTICE_EVENTS.has(facts.event)) missing.push('event');
+  if (!facts.provenanceId) missing.push('provenance_id');
+  if (typeof n.key_fingerprint !== 'string') missing.push('key_fingerprint');
+  if (parseTime(n.issued_at) === null) missing.push('issued_at');
+  if (!n.claims || typeof n.claims !== 'object' || Array.isArray(n.claims)) missing.push('claims');
+  if (typeof n.signature !== 'string' || !n.signature) missing.push('signature');
+  if (facts.event === 'key-rotation' && typeof n.claims?.new_public_key !== 'string') missing.push('claims.new_public_key');
+  if (missing.length) return out('invalid', `Missing or malformed: ${missing.join(', ')}`, facts);
+
+  const { publicKey } = options;
+  if (typeof publicKey !== 'string' || !publicKey) {
+    return out('unchecked', 'No public key supplied — the signature was not checked', facts);
+  }
+  let fingerprint;
+  try {
+    fingerprint = await keyFingerprint(publicKey);
+  } catch {
+    return out('unchecked', 'Public key is not valid base64', facts);
+  }
+  if (fingerprint !== n.key_fingerprint) {
+    return out('invalid', 'Notice names a different signing key than the one supplied', facts);
+  }
+
+  let genuine;
+  try {
+    genuine = await verifyEd25519(publicKey, n.signature, noticeSigningPayload(n));
+  } catch (e) {
+    return out('invalid', `Signature could not be checked: ${e.message}`, facts);
+  }
+  if (!genuine) return out('invalid', 'Signature does not verify', facts);
+
+  if (facts.event === 'key-rotation') {
+    let newKeyFingerprint;
+    try {
+      newKeyFingerprint = await keyFingerprint(n.claims.new_public_key);
+    } catch {
+      return out('invalid', 'claims.new_public_key is not valid base64', facts);
+    }
+    if (n.claims.new_key_fingerprint && n.claims.new_key_fingerprint !== newKeyFingerprint) {
+      return out('invalid', 'claims.new_key_fingerprint does not match claims.new_public_key', facts);
+    }
+    return out('valid', null, { ...facts, newKeyFingerprint });
+  }
+  return out('valid', null, facts);
+}
+
+/**
+ * Whether a declaration's links to an A2A Agent Card and an MCP Registry entry
+ * are confirmed by shared control, or merely claimed. Offline; see SPEC.md,
+ * "Linking with A2A and MCP".
+ *
+ *   confirmed  the same party provably controls both ends
+ *   claimed    the declaration names it, but control is not shown to match
+ *   none       no link declared
+ *
+ * @param {object} declaration  Parsed declaration
+ * @returns {{ a2a: 'confirmed'|'claimed'|'none', mcp: 'confirmed'|'claimed'|'none' }}
+ */
+export function checkInteropLinks(declaration) {
+  const id = parseProvenanceId(declaration?.provenance_id);
+  const interop = declaration?.interop ?? {};
+  const host = id?.platform === 'domain' ? id.path.split('/')[0].toLowerCase() : null;
+
+  let a2a = 'none';
+  if (typeof interop.a2a_agent_card === 'string') {
+    a2a = 'claimed';
+    try {
+      const url = new URL(interop.a2a_agent_card);
+      if (host && url.protocol === 'https:' && url.hostname.toLowerCase() === host) a2a = 'confirmed';
+    } catch {}
+  }
+
+  let mcp = 'none';
+  if (typeof interop.mcp_registry === 'string') {
+    mcp = 'claimed';
+    const namespace = interop.mcp_registry.split('/')[0].toLowerCase();
+    const labels = namespace.split('.');
+    if (host && labels.length >= 2 && labels.slice().reverse().join('.') === host) {
+      mcp = 'confirmed';
+    } else if (id?.platform === 'github' && labels[0] === 'io' && labels[1] === 'github' && labels.length === 3) {
+      const owner = id.path.split('/')[0].toLowerCase();
+      if (labels[2] === owner) mcp = 'confirmed';
+    }
+  }
+
+  return { a2a, mcp };
 }

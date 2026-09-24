@@ -51,6 +51,7 @@ export const REVOCATION_DOMAIN = 'provenance-revocation-v1';
 
 export const ATTESTATION_DOMAIN = 'provenance-attestation-v1';
 export const ATTESTATION_WITHDRAWAL_DOMAIN = 'provenance-attestation-withdrawal-v1';
+export const NOTICE_DOMAIN = 'provenance-notice-v1';
 
 /** Payload for proving live control of a key. Nonce must be single-use. */
 export function challengePayload(provenanceId, nonce) {
@@ -169,6 +170,25 @@ export function attestationWithdrawalPayload(issuerId, attestationId) {
   // Canonical JSON rather than a colon-joined string: identifiers contain
   // colons, and "a:b" + "c" must not sign the same bytes as "a" + "b:c".
   return `${ATTESTATION_WITHDRAWAL_DOMAIN}:${canonicalValue({ attestation_id: attestationId, issuer: issuerId })}`;
+}
+
+/**
+ * The exact string a notice signature is computed over: the canonical form of
+ * the whole notice with its own `signature` removed.
+ *
+ * A notice is what an agent's operator says about the agent, signed with the
+ * agent's own key — the counterpart of an attestation, which a third party
+ * signs. Its own prefix keeps it from being passed off as either.
+ *
+ * @param {object} notice
+ * @returns {string}
+ */
+export function noticeSigningPayload(notice) {
+  if (notice === null || typeof notice !== 'object' || Array.isArray(notice)) {
+    throw new CanonicalError('Notice must be a parsed object');
+  }
+  const { signature: _excluded, ...covered } = notice;
+  return `${NOTICE_DOMAIN}:${canonicalValue(covered)}`;
 }
 
 /**

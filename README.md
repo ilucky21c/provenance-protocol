@@ -4,7 +4,8 @@ The Provenance Protocol: an open standard for declaring and verifying AI agent
 identity — and a reference implementation of it.
 
 An agent publishes a signed **declaration**: what it is, what it can do, what it
-will never do, and who answers for it. Third parties publish signed
+will never do, who answers for it, and — optionally — what happens to data,
+who else touches it, what needs a human, and what it depends on. Third parties publish signed
 **attestations** about it: what they observed, what was reported, what they
 approved. Both verify **offline** — no account, no API key, and no call to any
 service. Nothing here depends on any particular company, this one included.
@@ -108,6 +109,50 @@ const attestation = {
 attestation.signature = signAttestation(myPrivateKey, attestation);
 ```
 
+## What changed, and does it matter?
+
+```js
+import { compareDeclarations } from 'provenance-protocol';
+
+for (const c of compareDeclarations(before, after)) {
+  // { field: 'data.retention', change: 'modified', from: 'P30D', to: 'P1Y',
+  //   direction: 'weakened', announced: false }
+}
+```
+
+Every watcher applying the spec's rules reports the same changes and agrees on
+which weaken the agent's promises: a constraint removed, retention lengthened, a
+subprocessor or region added, human approval dropped, a limit raised. A
+weakening the operator listed in advance under `changes.pending` is marked
+`announced`.
+
+## Notices — the operator's own signed updates
+
+```js
+import { verifyNotice } from 'provenance-protocol';
+const r = await verifyNotice(notice, { publicKey });   // for key-rotation: the OLD key
+r.status            // 'valid' | 'invalid' | 'unchecked'
+r.newKeyFingerprint // after a valid key-rotation, pin this
+```
+
+Events: `declaration-published`, `release`, `key-rotation` (signed by the old
+key, so a new key arrives vouched for), `incident`. Operators sign them with
+`signNotice` from `provenance-protocol/keygen`;
+[`provenance-middleware`](https://github.com/ilucky21c/provenance-middleware)
+publishes them for you.
+
+## Links to A2A and MCP
+
+```js
+import { checkInteropLinks } from 'provenance-protocol';
+checkInteropLinks(declaration);   // { a2a: 'confirmed' | 'claimed' | 'none', mcp: … }
+```
+
+A declaration can point to the same agent's A2A Agent Card and MCP Registry
+entry. A link is *confirmed* only when the same party provably controls both
+ends; otherwise it is *claimed*, so nobody can attach their declaration to a
+well-known agent.
+
 ## Sign your own declaration
 
 From the command line — no service involved:
@@ -138,9 +183,9 @@ check" is never reported as a failure, or as a pass.
 
 | Import | Runs in | What |
 |---|---|---|
-| `provenance-protocol` | anywhere with Web Crypto | verify, check, locate, attestations |
-| `provenance-protocol/keygen` | Node | keys, signing declarations, challenges, attestations |
-| `provenance-protocol/validate` | Node | schema validation for declarations and attestations |
+| `provenance-protocol` | anywhere with Web Crypto | verify, check, locate, compare, attestations, notices |
+| `provenance-protocol/keygen` | Node | keys, signing declarations, challenges, attestations, notices |
+| `provenance-protocol/validate` | Node | schema validation for declarations, attestations and notices |
 | `provenance-protocol/index-client` | anywhere | client for an index service you choose (below) |
 
 The main entry has no dependencies. `yaml` is used only by the CLI.

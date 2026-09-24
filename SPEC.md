@@ -1,5 +1,5 @@
 # Provenance Protocol Specification
-**Declarations 0.1 and 0.2 · Attestations 0.1**
+**Declarations 0.1 and 0.2 · Attestations 0.1 · Notices 0.1**
 
 ---
 
@@ -184,6 +184,114 @@ identity:
 | `identity.signature` | string | Base64 Ed25519 signature. In 0.2 over the whole declaration; in 0.1 over `<provenance_id>:<public_key>` only. Optional — see Signing and Verification |
 | `identity.algorithm` | string | Always `ed25519` |
 | `ajp.endpoint` | string | Where this agent accepts jobs under the Agent Job Protocol |
+
+### Operational sections
+
+Optional sections a risk or procurement reviewer asks about first. They are
+part of spec 0.2: a declaration that omits them is exactly as valid as before,
+and a verifier that predates them still verifies the signature, because
+unknown top-level fields are ignored (Conformance, point 3) and the signing
+rule is unchanged. Every value is structured — controlled words, ISO codes,
+ISO 8601 durations — so they can be compared mechanically.
+
+These are the operator's own signed statements. Their value is that they are
+signed, versioned and comparable: a change is provable, dated and attributable.
+
+**`operator`** — the legal party answerable for the agent.
+
+```yaml
+operator:
+  legal_name: "Acme Robotics Ltd"
+  jurisdiction: "GB"                 # ISO 3166-1 alpha-2
+  registration: "GB-COH:12345678"    # optional, scheme:number
+  security_contact: "https://acme.example/.well-known/security.txt"
+```
+
+**`data`** — what happens to data the agent is given.
+
+```yaml
+data:
+  categories: [customer_content, personal]   # customer_content | personal | special_category | financial | credentials
+  retention: "P30D"                          # ISO 8601 duration, or none
+  training_use: none                         # none | opt_in | opt_out | yes
+  regions: [EU]                              # ISO 3166-1 alpha-2, or EU / EEA
+```
+
+**`subprocessors`** — other parties that touch the data. The model provider is
+one of them.
+
+```yaml
+subprocessors:
+  - name: "ModelCo"
+    role: model_provider         # model_provider | hosting | storage | tool | other
+    regions: [US]
+    data_categories: [customer_content]
+    provenance_id: null          # when the subprocessor has one
+```
+
+**`oversight`** — what needs a human.
+
+```yaml
+oversight:
+  approval_required: [financial:transact, write:email]   # capabilities used only with per-use approval
+  pausable_by_customer: true
+```
+
+**`limits`** — hard ceilings.
+
+```yaml
+limits:
+  - applies_to: financial:transact
+    max: 500
+    unit: USD                    # ISO 4217, or actions
+    per: "P1D"                   # omit for a per-action limit
+```
+
+**`dependencies`** — what the agent relies on. Supersedes `skills` and
+`delegates`, which remain valid. A dependency with a `provenance_id` has its own
+declaration, so a watcher can follow the chain.
+
+```yaml
+dependencies:
+  - provenance_id: "provenance:domain:search-tool.example"
+    kind: mcp_server             # mcp_server | agent | api | package
+    purpose: "web search"
+  - url: "https://api.payments.example"
+    kind: api
+```
+
+**`certifications`** — pointers only. A certification is proven by the
+certifier's signed [attestation](#attestations), which `attestation_url`
+points to; the declaration naming it proves nothing on its own.
+
+```yaml
+certifications:
+  - standard: "ISO/IEC 42001"
+    attestation_url: "https://certifier.example/att/abc123.json"
+```
+
+**`changes`** — advance notice. The operator commits to a minimum notice period
+before a weakening change and lists pending changes while they are pending.
+
+```yaml
+changes:
+  notice_period: "P30D"
+  pending:
+    - field: constraints
+      change: removed
+      value: no:write:external
+      effective: "2026-11-01"
+      reason: "adding CRM sync"
+```
+
+**`interop`** — the same agent in other ecosystems. See
+[Linking with A2A and MCP](#linking-with-a2a-and-mcp).
+
+```yaml
+interop:
+  a2a_agent_card: "https://agent.example.com/.well-known/agent-card.json"
+  mcp_registry: "com.example/research-server"
+```
 
 ---
 
@@ -482,6 +590,7 @@ be presented as another:
 | Revocation | `provenance-revocation-v1:<provenance_id>` |
 | Attestation | `provenance-attestation-v1:<canonical JSON>` |
 | Attestation withdrawal | `provenance-attestation-withdrawal-v1:<canonical JSON of {attestation_id, issuer}>` |
+| Notice | `provenance-notice-v1:<canonical JSON>` |
 
 This is not a precaution against something hypothetical. In 0.1 a challenge was
 signed as `<provenance_id>:<nonce>` and a revocation as
@@ -646,6 +755,138 @@ in `scope`.
 
 ---
 
+## Notices
+
+An attestation is what someone else says about an agent. A **notice** is what
+the operator says about its own agent as things happen, signed with the
+agent's own key. Notices let a watcher learn of a change when it happens
+instead of on its next scheduled check.
+
+```json
+{
+  "notice": "0.1",
+  "id": "n-2026-09-24-001",
+  "event": "declaration-published",
+  "provenance_id": "provenance:domain:agent.example.com",
+  "key_fingerprint": "…64 hex…",
+  "issued_at": "2026-09-24T10:00:00Z",
+  "claims": {
+    "declaration_url": "https://agent.example.com/.well-known/provenance.json",
+    "declaration_digest": "sha256:…",
+    "running_version": "4.2.0"
+  },
+  "signature": "base64…"
+}
+```
+
+The signature is Ed25519 over `provenance-notice-v1:` + the canonical JSON of the
+notice without `signature`. `key_fingerprint` names the signing key. The schema
+is `schema/notice-0.1.json`.
+
+| Event | Claims | Sent when |
+|---|---|---|
+| `declaration-published` | `declaration_url`, `declaration_digest`, `running_version` | the service starts, or the declaration changes |
+| `release` | `version`, `commit`, `declaration_digest` | CI ships a release — ties promises to a build |
+| `key-rotation` | `new_public_key`, `reason` | the operator replaces its key |
+| `incident` | `severity`, `summary`, `started_at`, `resolved_at`, `relates_to` | the operator discloses its own incident |
+
+**Key rotation is signed by the old key.** The notice is the old key vouching
+for the new one. A verifier that pinned the old key accepts the new key as a
+continuation, not as an impostor. A rotation signed by the new key proves
+nothing, and a verifier MUST NOT accept it as continuity. If the old key is
+lost or compromised, there is no continuity to prove: the operator publishes a
+new declaration, and watchers treat it as a new key, which is the truth.
+
+### Delivery
+
+A notice is signed, so how it travels needs no trust:
+
+- **Pull.** The operator MAY publish recent notices, newest first, as a JSON
+  array at `https://<host>/.well-known/provenance/notices` for domain ids. Any
+  watcher can read them without asking permission.
+- **Push.** The operator MAY send each notice by HTTPS `POST`, as
+  `application/json`, to watchers it chooses. A watcher MUST verify it and MUST
+  NOT treat an unverifiable notice as a change.
+
+No particular watcher is part of the standard. An operator picks any, several or
+none.
+
+A notice is the operator's own statement. It is evidence of what they said and
+when, like a declaration — not proof that it is true.
+
+---
+
+## Comparing declarations
+
+Two watchers looking at the same two versions of a declaration should report
+the same changes and agree on which ones matter. This section fixes how.
+
+Compare the parsed declarations field by field, ignoring `identity.signature`.
+List items are matched by identity where they have one (a subprocessor by
+`name`, a dependency by `provenance_id` or `url`, a limit by `applies_to`,
+`unit` and `per`, a certification by `standard`), so an edited entry is one
+modification rather than a removal and an addition.
+
+Each change is classified for someone relying on the agent:
+
+| Weakened | Strengthened |
+|---|---|
+| a constraint removed | a constraint added |
+| a capability added | a capability removed |
+| a data category, region or subprocessor added; a subprocessor gaining a region or data category | a certification added |
+| retention lengthened; `training_use` moving towards `yes` | retention shortened; `training_use` moving towards `none` |
+| a capability no longer needing human approval; no longer pausable by the customer | a capability newly needing approval |
+| a limit raised or removed | a limit lowered or added |
+| a dependency added | |
+| a certification removed | |
+| the notice period shortened or removed | a notice period lengthened or added |
+| `identity.public_key` or `provenance_id` changed | |
+
+Everything else is neutral. A weakening is **announced** when the previous
+version listed it in `changes.pending`. A weakening that took effect without
+having been pending for the declared `notice_period` breaks the operator's own
+promise, which a watcher with the history can show.
+
+A changed key is classified as weakened until a valid `key-rotation` notice
+signed by the previous key explains it.
+
+The reference implementation is `compareDeclarations` in this package.
+
+---
+
+## Linking with A2A and MCP
+
+The same agent may also publish an A2A Agent Card or an entry in the MCP
+Registry. The Provenance declaration adds what those do not carry — explicit
+constraints, the operational sections, stamps from third parties — and links
+to them rather than replacing them.
+
+A link is **confirmed** when both ends are controlled by the same party:
+
+- **A2A.** A declaration with a `provenance:domain:<host>` id and an Agent Card
+  at `https://<host>/.well-known/agent-card.json` on the same host are linked by
+  location: whoever controls the host published both. `interop.a2a_agent_card`
+  names the card explicitly; when it points to a different host, the link is
+  **claimed**, not confirmed, unless that card links back.
+- **MCP.** The MCP Registry verifies namespace ownership by domain: a server
+  named `com.example/…` was published by whoever controls `example.com`. A
+  declaration with id `provenance:domain:example.com` naming that server in
+  `interop.mcp_registry` is confirmed by the same domain control. Likewise a
+  server named `io.github.<owner>/…`, which the registry ties to that GitHub
+  account, is confirmed for a `provenance:github:<owner>/…` declaration. Any other
+  pairing — including a subdomain, which on shared hosting is often a
+  different party — is claimed.
+
+A watcher MUST report a claimed link as claimed. Treating a link as confirmed
+without matching control would let anyone attach their declaration to a
+well-known agent.
+
+An agent that has only an A2A card or an MCP entry can still be the subject of
+an attestation, named by `subject.url`. When it later publishes a declaration,
+the history accumulated about that URL carries over.
+
+---
+
 ## Conformance
 
 An implementation of this specification is conformant if it:
@@ -671,8 +912,11 @@ An implementation of this specification is conformant if it:
    signature before the validity window, keeps `valid`, `expired`,
    `not_yet_valid`, `invalid` and `unchecked` distinct, and reproduces every
    outcome in `test-vectors/attestations-0.1.json`.
+9. For notices: refuses unknown `notice` versions, accepts a key rotation only
+   when signed by the previous key, and reproduces every outcome in
+   `test-vectors/notices-0.1.json`.
 
-Points 6 to 8 are what make independent implementations agree. An
+Points 6 to 9 are what make independent implementations agree. An
 implementation that passes the test vectors interoperates with every other
 one that does, with no reference to any particular service.
 

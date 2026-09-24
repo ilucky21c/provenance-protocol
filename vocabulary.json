@@ -36,5 +36,31 @@
       "ajp:receiver": "accepts jobs under the Agent Job Protocol",
       "ajp:sender": "sends jobs under the Agent Job Protocol"
     }
+  },
+  "data_categories": {
+    "customer_content": "content the customer supplies or the agent produces for them",
+    "personal": "information about an identifiable person",
+    "special_category": "health, biometric, genetic, political, religious and similar sensitive personal data",
+    "financial": "account, card or transaction data",
+    "credentials": "passwords, tokens, keys"
+  },
+  "subprocessor_roles": [
+    "model_provider",
+    "hosting",
+    "storage",
+    "tool",
+    "other"
+  ],
+  "dependency_kinds": [
+    "mcp_server",
+    "agent",
+    "api",
+    "package"
+  ],
+  "training_use": {
+    "none": "never used for training",
+    "opt_in": "used only when the customer opts in",
+    "opt_out": "used unless the customer opts out",
+    "yes": "used"
   }
 }

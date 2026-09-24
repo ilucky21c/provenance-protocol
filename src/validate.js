@@ -25,11 +25,12 @@ const schema = (name) => {
 
 const DECLARATION_SCHEMAS = { '0.1': 'provenance-0.1.json', '0.2': 'provenance-0.2.json' };
 const ATTESTATION_SCHEMAS = { '0.1': 'attestation-0.1.json' };
+const NOTICE_SCHEMAS = { '0.1': 'notice-0.1.json' };
 
 const KNOWN = new Set([
   '$schema', '$id', '$comment', 'title', 'description',
   'type', 'required', 'properties', 'additionalProperties', 'enum', 'const',
-  'pattern', 'minLength', 'maxLength', 'items', 'uniqueItems', 'format',
+  'pattern', 'minLength', 'maxLength', 'minimum', 'items', 'uniqueItems', 'format',
   'anyOf', 'allOf', 'if', 'then',
 ]);
 
@@ -61,6 +62,10 @@ function check(s, v, path, errors) {
   }
   if ('const' in s && v !== s.const) errors.push(`${path}: must be ${JSON.stringify(s.const)}`);
   if (s.enum && !s.enum.includes(v)) errors.push(`${path}: must be one of ${s.enum.join(', ')}`);
+
+  if ((t === 'number' || t === 'integer') && s.minimum !== undefined && v < s.minimum) {
+    errors.push(`${path}: must be at least ${s.minimum}`);
+  }
 
   if (t === 'string') {
     if (s.minLength !== undefined && v.length < s.minLength) errors.push(`${path}: too short`);
@@ -147,4 +152,14 @@ export function validateDeclaration(declaration) {
  */
 export function validateAttestation(attestation) {
   return run(attestation, 'attestation', ATTESTATION_SCHEMAS, 'Attestation');
+}
+
+/**
+ * Validate a parsed notice against the schema for its `notice` version.
+ *
+ * @param {object} notice
+ * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
+ */
+export function validateNotice(notice) {
+  return run(notice, 'notice', NOTICE_SCHEMAS, 'Notice');
 }

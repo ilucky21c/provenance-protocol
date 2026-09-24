@@ -180,3 +180,29 @@ export function verifyAttestation(
 export function verifyAttestationWithdrawal(
   issuerPublicKey: string, issuerId: string, attestationId: string, signatureBase64: string
 ): Promise<boolean>;
+
+export interface NoticeVerification {
+  /** 'invalid' is forged, altered or signed by another key; 'unchecked' could not be checked. */
+  status: 'valid' | 'invalid' | 'unchecked';
+  valid: boolean;
+  reason: string | null;
+  event: 'declaration-published' | 'release' | 'key-rotation' | 'incident' | null;
+  provenanceId: string | null;
+  /** For a valid key-rotation: the fingerprint to pin from now on. */
+  newKeyFingerprint: string | null;
+}
+
+/**
+ * Verify a notice — a statement by an agent's operator about the agent,
+ * signed with the agent's key. For key-rotation, pass the OLD key.
+ */
+export function verifyNotice(notice: unknown, options: { publicKey: string }): Promise<NoticeVerification>;
+
+/**
+ * Whether a declaration's links to an A2A Agent Card and an MCP Registry
+ * entry are confirmed by shared control or merely claimed.
+ */
+export function checkInteropLinks(declaration: object): {
+  a2a: 'confirmed' | 'claimed' | 'none';
+  mcp: 'confirmed' | 'claimed' | 'none';
+};

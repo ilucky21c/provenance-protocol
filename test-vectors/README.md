@@ -43,6 +43,13 @@ that matter most are `attestation-forged-and-expired` (a forgery must read as
 Also included: the `declaration_digest` of a 0.2 declaration, and a withdrawal
 signature with its payload.
 
+## notices-0.1.json
+
+Notices (format 0.1): statements an operator signs about its own agent. Verify
+every vector with the **old** key. `notice-rotation-by-new-key` and
+`notice-rotation-by-stranger` must be `invalid`: only the previous key can vouch
+for its successor.
+
 ## Running them
 
 Any Ed25519 implementation works. With Node:

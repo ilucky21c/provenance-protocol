@@ -1,0 +1,180 @@
+{
+  "$comment": "Normative test vectors for Provenance notices, format 0.1. Verify every vector with the old key. Test keys only — never use in production.",
+  "format_version": "0.1",
+  "algorithm": "ed25519",
+  "signing": {
+    "payload": "the string \"provenance-notice-v1:\" followed by the JCS canonical JSON of the notice with signature removed"
+  },
+  "old_key": {
+    "public_key": "MCowBQYDK2VwAyEAyautuY4K+x5H259NfiODQC1Guk4K4tXIDmfm2iPyu0U=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIN0hzGkBkYhhZSzzz3MRZyZ6aljHHgclSZfzoNgKdIA7",
+    "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044"
+  },
+  "new_key": {
+    "public_key": "MCowBQYDK2VwAyEArTw0EdClljVvqBoUafUTA/cQAzSCGUPJDsUWNM692T4=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIBFhBk01jmfVlPEKXLp0xM4QPLDU09/MKK4Yqvg7iILn"
+  },
+  "stranger_key": {
+    "public_key": "MCowBQYDK2VwAyEAAGqN5PHQC4PDST3H3hxo4wjMwAstZ+VgYKNAsxX6xDk=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIGw83AFYxExRTyAURBbqYQLpJ8YGS0aj9j+s4mB+Lt4N"
+  },
+  "reference_payload": "provenance-notice-v1:{\"claims\":{\"declaration_digest\":\"sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0\",\"declaration_url\":\"https://agent.example.com/.well-known/provenance.json\",\"running_version\":\"4.2.0\"},\"event\":\"declaration-published\",\"id\":\"n-1\",\"issued_at\":\"2026-09-24T10:00:00Z\",\"key_fingerprint\":\"51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044\",\"notice\":\"0.1\",\"provenance_id\":\"provenance:domain:agent.example.com\"}",
+  "vectors": [
+    {
+      "id": "notice-declaration-published",
+      "expect": "valid",
+      "purpose": "the operator announces the declaration it is serving",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-1",
+        "event": "declaration-published",
+        "claims": {
+          "declaration_url": "https://agent.example.com/.well-known/provenance.json",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0",
+          "running_version": "4.2.0"
+        },
+        "signature": "szaYuI2/3T+KVE/RzlOohoH9CpN7GfsV0QRHSJjOiMy41cENrbh1C1iacgDcqLggk/70ZNQBekituZANI4k2Cg=="
+      }
+    },
+    {
+      "id": "notice-release",
+      "expect": "valid",
+      "purpose": "CI records which declaration shipped with which release",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-2",
+        "event": "release",
+        "claims": {
+          "version": "4.2.0",
+          "commit": "a1b2c3d4e5f6",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "signature": "MS4HRk+ZIPWm0OHs4mAulJC/JxfOjzwVutynMpDCY6HFVMVukeF9xJb9WRO1qPsR+XYkQI3EsIFUunxUN/iNAg=="
+      }
+    },
+    {
+      "id": "notice-key-rotation",
+      "expect": "valid",
+      "purpose": "the old key vouches for the new one",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-3",
+        "event": "key-rotation",
+        "claims": {
+          "new_public_key": "MCowBQYDK2VwAyEArTw0EdClljVvqBoUafUTA/cQAzSCGUPJDsUWNM692T4=",
+          "new_key_fingerprint": "b0469ec19daa729e016a4a5b57ed1cafe5b88b69351ed390d1d062cda06fc922",
+          "reason": "routine"
+        },
+        "signature": "u+0JNAERYAyabCV5jR554MTU6hwmT4xtbWjFdDJSNiAQrci84dGboXiaFKbM9Cwsro2vGp5AfaVZiVPo1cY5CA=="
+      },
+      "new_key_fingerprint": "b0469ec19daa729e016a4a5b57ed1cafe5b88b69351ed390d1d062cda06fc922"
+    },
+    {
+      "id": "notice-incident",
+      "expect": "valid",
+      "purpose": "the operator discloses its own incident",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-4",
+        "event": "incident",
+        "claims": {
+          "severity": "medium",
+          "summary": "Customer emails were written to a debug log for six hours.",
+          "started_at": "2026-09-20T08:00:00Z",
+          "resolved_at": "2026-09-20T14:00:00Z",
+          "relates_to": [
+            "no:pii"
+          ]
+        },
+        "signature": "Xe6oHujRcKQpcMfoxakXF/HKOrfcxGUd/q3ZA5OJxgvFo99Am0Hsc+wviHlhGOCYc4f8GxAIf2C/rIgZe8pHCg=="
+      }
+    },
+    {
+      "id": "notice-tampered",
+      "expect": "invalid",
+      "purpose": "incident severity downgraded after signing",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-4",
+        "event": "incident",
+        "claims": {
+          "severity": "low",
+          "summary": "Customer emails were written to a debug log for six hours.",
+          "started_at": "2026-09-20T08:00:00Z",
+          "resolved_at": "2026-09-20T14:00:00Z",
+          "relates_to": [
+            "no:pii"
+          ]
+        },
+        "signature": "Xe6oHujRcKQpcMfoxakXF/HKOrfcxGUd/q3ZA5OJxgvFo99Am0Hsc+wviHlhGOCYc4f8GxAIf2C/rIgZe8pHCg=="
+      }
+    },
+    {
+      "id": "notice-rotation-by-new-key",
+      "expect": "invalid",
+      "purpose": "a rotation signed by the new key proves nothing — only the old key can vouch",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-5",
+        "event": "key-rotation",
+        "claims": {
+          "new_public_key": "MCowBQYDK2VwAyEArTw0EdClljVvqBoUafUTA/cQAzSCGUPJDsUWNM692T4="
+        },
+        "signature": "OdHckEDRXUY/EzQLyPKhkfF/S/bjuVRhC4RfDDsN3Wx0jLwnxkofK0w0U+hIuv441vwLuXEKO8cehzmi7dyHCg=="
+      }
+    },
+    {
+      "id": "notice-rotation-by-stranger",
+      "expect": "invalid",
+      "purpose": "an attacker announces their own key as the successor",
+      "notice": {
+        "notice": "0.1",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-6",
+        "event": "key-rotation",
+        "claims": {
+          "new_public_key": "MCowBQYDK2VwAyEAAGqN5PHQC4PDST3H3hxo4wjMwAstZ+VgYKNAsxX6xDk="
+        },
+        "signature": "V+KdehCrLtVnqkGnNV/l7ykweJv+f2Aa16U2//BbcHRYRzYf7V0o3hDFkBxIop2279cIaFTOqKegjL+uji9nCw=="
+      }
+    },
+    {
+      "id": "notice-unknown-version",
+      "expect": "unchecked",
+      "purpose": "refuse to guess at an unknown version",
+      "notice": {
+        "notice": "9.9",
+        "provenance_id": "provenance:domain:agent.example.com",
+        "key_fingerprint": "51e58c04f96f435726e4e56b0f3ef6b0ec29661ee3274ac1a2f152e83ade7044",
+        "issued_at": "2026-09-24T10:00:00Z",
+        "id": "n-7",
+        "event": "release",
+        "claims": {
+          "version": "1",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "signature": "4fOCbGXhEeS0xJUm8b3Jaz6sOFr/OHHT62AZ8z7QdwtzZTONFRMXvJQGvZNp63X7KiMJpRUC5JE8bL75AL6eDg=="
+      }
+    }
+  ]
+}

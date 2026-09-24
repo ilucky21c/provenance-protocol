@@ -19,9 +19,11 @@
  */
 
 export * from './verify.js';
+export { compareDeclarations, durationDays } from './compare.js';
 export {
   declarationSigningPayload,
   attestationSigningPayload,
+  noticeSigningPayload,
   canonicalJson,
   CanonicalError,
 } from './canonical.js';

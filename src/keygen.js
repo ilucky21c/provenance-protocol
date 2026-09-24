@@ -33,6 +33,7 @@ import {
   revocationPayload,
   attestationSigningPayload,
   attestationWithdrawalPayload,
+  noticeSigningPayload,
 } from './canonical.js';
 
 /**
@@ -239,4 +240,20 @@ export function signAttestation(privateKeyBase64, attestation) {
  */
 export function signAttestationWithdrawal(privateKeyBase64, issuerId, attestationId) {
   return _sign(privateKeyBase64, attestationWithdrawalPayload(issuerId, attestationId));
+}
+
+/**
+ * Sign a notice — a statement the operator makes about its own agent: a
+ * declaration published, a release shipped, a key rotated, an incident.
+ *
+ * Signed with the agent's own key, except `key-rotation`, which is signed
+ * with the OLD key so that the new key arrives vouched for by the one a
+ * watcher already trusts.
+ *
+ * @param {string} privateKeyBase64
+ * @param {object} notice   Any existing signature is ignored
+ * @returns {string}        Base64 signature — put it in `signature`
+ */
+export function signNotice(privateKeyBase64, notice) {
+  return _sign(privateKeyBase64, noticeSigningPayload(notice));
 }
