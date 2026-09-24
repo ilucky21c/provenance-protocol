@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://getprovenance.dev/schema/attestation-0.1.json",
+  "title": "Provenance attestation",
+  "description": "A signed statement by an issuer about an agent. Verifiable offline against the issuer's public key. See SPEC.md, Attestations.",
+  "type": "object",
+  "required": ["attestation", "id", "kind", "issuer", "subject", "issued_at", "valid_until", "scope", "claims", "signature"],
+  "properties": {
+    "attestation": {
+      "type": "string",
+      "enum": ["0.1"],
+      "description": "Attestation format version."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Unique among this issuer's attestations. Used to withdraw it."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^(declaration-check|report|decision|[a-z0-9.-]+\\.[a-z]{2,}:[a-z0-9-]+)$",
+      "description": "declaration-check, report or decision; or a custom kind prefixed with the issuer's domain, e.g. example.com:pen-test."
+    },
+    "issuer": {
+      "type": "object",
+      "required": ["provenance_id", "key_fingerprint"],
+      "properties": {
+        "provenance_id": {
+          "type": "string",
+          "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket|domain):.+$",
+          "description": "The issuer's own provenance id. Its declaration publishes the issuer's public key."
+        },
+        "key_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the issuer's public key (SPKI DER), hex. Names which key signed, so rotation is visible."
+        }
+      },
+      "additionalProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "description": "The agent the attestation is about. provenance_id when it has one; url for an agent observed without one.",
+      "properties": {
+        "provenance_id": {
+          "type": "string",
+          "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket|domain):.+$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "declaration_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Which state of the subject's declaration this is about. SHA-256 of its signing payload."
+        }
+      },
+      "anyOf": [
+        { "required": ["provenance_id"] },
+        { "required": ["url"] }
+      ],
+      "additionalProperties": false
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 with an explicit offset."
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "After this the attestation is expired: genuine but stale. Must be later than issued_at."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "What this attestation covers and does not, in plain language. Travels with it wherever it goes."
+    },
+    "status_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Where the issuer publishes withdrawals. Optional: without it, expiry is the only way the attestation ends."
+    },
+    "claims": {
+      "type": "object",
+      "description": "Kind-specific content. The shapes for the core kinds are below; custom kinds define their own."
+    },
+    "signature": {
+      "type": "string",
+      "description": "Base64 Ed25519 signature over 'provenance-attestation-v1:' followed by the canonical JSON of this attestation with signature removed."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "declaration-check" } } },
+      "then": {
+        "properties": {
+          "subject": { "required": ["provenance_id", "declaration_digest"] },
+          "claims": {
+            "type": "object",
+            "required": ["retrieved_from", "retrieved_at", "signature", "location"],
+            "properties": {
+              "retrieved_from": { "type": "string", "format": "uri" },
+              "retrieved_at": { "type": "string", "format": "date-time" },
+              "signature": { "type": "string", "enum": ["declaration", "identity", "none", "invalid"] },
+              "location": { "type": "string", "enum": ["match", "mismatch", "unchecked"] },
+              "key_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "changes": {
+                "type": "array",
+                "description": "Differences from the previous state this issuer saw, if any.",
+                "items": {
+                  "type": "object",
+                  "required": ["field", "change"],
+                  "properties": {
+                    "field": { "type": "string" },
+                    "change": { "type": "string", "enum": ["added", "removed", "modified"] },
+                    "value": {}
+                  }
+                }
+              },
+              "previous_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "report" } } },
+      "then": {
+        "properties": {
+          "claims": {
+            "type": "object",
+            "required": ["reporter", "reported_at", "category", "state"],
+            "properties": {
+              "reporter": {
+                "type": "object",
+                "description": "Who made the report. The issuer attests that this party reported it, not that the report is true.",
+                "properties": {
+                  "provenance_id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "disclosed": { "type": "boolean", "description": "false: the issuer holds the reporter's identity but does not publish it." }
+                },
+                "required": ["disclosed"]
+              },
+              "reported_at": { "type": "string", "format": "date-time" },
+              "category": { "type": "string" },
+              "relates_to": {
+                "type": "array",
+                "description": "Declared constraints or capabilities the report concerns, in the standard vocabulary.",
+                "items": { "type": "string" }
+              },
+              "summary": { "type": "string", "maxLength": 2000 },
+              "state": { "type": "string", "enum": ["received", "responded", "disputed", "withdrawn", "resolved"] },
+              "response": { "type": "string", "maxLength": 2000, "description": "The subject's answer, when given." }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "decision" } } },
+      "then": {
+        "properties": {
+          "subject": { "required": ["declaration_digest"] },
+          "claims": {
+            "type": "object",
+            "required": ["outcome", "use", "decided_at"],
+            "properties": {
+              "outcome": { "type": "string", "enum": ["approved", "withdrawn"] },
+              "use": { "type": "string", "description": "What the agent was approved for." },
+              "decided_at": { "type": "string", "format": "date-time" },
+              "decided_by": { "type": "string", "description": "Person or role who decided." }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

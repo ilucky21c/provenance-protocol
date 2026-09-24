@@ -13,7 +13,9 @@
  * what anyone would expect.
  *
  * Rules:
- *   - object keys sorted by Unicode code point, recursively
+ *   - JSON Canonicalization Scheme (JCS, RFC 8785): object keys sorted by
+ *     UTF-16 code units, recursively — which is what Array.prototype.sort()
+ *     does by default — and strings/numbers serialised as JSON.stringify does
  *   - no insignificant whitespace
  *   - `identity.signature` removed before signing (it cannot cover itself)
  *   - only JSON-representable values; anything else throws rather than being
@@ -46,6 +48,9 @@ const DOMAIN = 'provenance-declaration-v1';
  */
 export const CHALLENGE_DOMAIN = 'provenance-challenge-v1';
 export const REVOCATION_DOMAIN = 'provenance-revocation-v1';
+
+export const ATTESTATION_DOMAIN = 'provenance-attestation-v1';
+export const ATTESTATION_WITHDRAWAL_DOMAIN = 'provenance-attestation-withdrawal-v1';
 
 /** Payload for proving live control of a key. Nonce must be single-use. */
 export function challengePayload(provenanceId, nonce) {
@@ -129,6 +134,53 @@ export function declarationSigningPayload(declaration) {
   }
 
   return `${DOMAIN}:${canonicalValue(covered)}`;
+}
+
+/**
+ * The exact string an attestation signature is computed over: the canonical
+ * form of the whole attestation with its own `signature` removed.
+ *
+ * Its own prefix means an attestation signature can never be passed off as a
+ * declaration, a challenge or a revocation signed by the same key — an issuer
+ * is usually also an agent with a declaration of its own.
+ *
+ * @param {object} attestation
+ * @returns {string}
+ */
+export function attestationSigningPayload(attestation) {
+  if (attestation === null || typeof attestation !== 'object' || Array.isArray(attestation)) {
+    throw new CanonicalError('Attestation must be a parsed object');
+  }
+  const { signature: _excluded, ...covered } = attestation;
+  return `${ATTESTATION_DOMAIN}:${canonicalValue(covered)}`;
+}
+
+/**
+ * Payload an issuer signs to withdraw one of its own attestations before it
+ * expires. Carries nothing but the two identifiers.
+ */
+export function attestationWithdrawalPayload(issuerId, attestationId) {
+  if (typeof issuerId !== 'string' || issuerId.length === 0) {
+    throw new CanonicalError('issuerId is required');
+  }
+  if (typeof attestationId !== 'string' || attestationId.length === 0) {
+    throw new CanonicalError('attestationId is required');
+  }
+  // Canonical JSON rather than a colon-joined string: identifiers contain
+  // colons, and "a:b" + "c" must not sign the same bytes as "a" + "b:c".
+  return `${ATTESTATION_WITHDRAWAL_DOMAIN}:${canonicalValue({ attestation_id: attestationId, issuer: issuerId })}`;
+}
+
+/**
+ * Canonical JSON (JCS, RFC 8785) of any plain value: keys sorted by UTF-16 code
+ * units at every depth, no insignificant whitespace. The building block the signing payloads use,
+ * exported for protocols layered on this one that need the same guarantee.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function canonicalJson(value) {
+  return canonicalValue(value);
 }
 
 export { DOMAIN as DECLARATION_SIGNING_DOMAIN };

@@ -1,0 +1,582 @@
+/**
+ * provenance-protocol/index-client — client for a Provenance index service
+ *
+ * NOT part of the standard. An index is one application built on it: a service
+ * that crawls or accepts registrations and answers questions about current
+ * standing (incidents, revocation, age). Nothing in the standard requires one —
+ * declarations verify offline, from `provenance-protocol` itself.
+ *
+ * You must name the index you are choosing to trust. There is no default.
+ *
+ *   import { Provenance } from 'provenance-protocol/index-client';
+ *   const index = new Provenance({ apiUrl: 'https://index.example.com' });
+ *   const trust = await index.check('provenance:github:alice/research-assistant');
+ */
+
+import { verifyAgentChallenge } from './verify.js';
+
+const SEVERITY_ORDER = ['low', 'medium', 'high', 'critical'];
+
+// Returns a failure reason string if clean check fails, null if passes.
+// requireClean: true | false | { minSeverity: 'low'|'medium'|'high'|'critical' }
+function _evaluateClean(requireClean, trust) {
+  if (!requireClean) return null;
+  if (trust.incidents === 0) return null;
+
+  // true = block on any open incident
+  if (requireClean === true) {
+    return `Agent has ${trust.incidents} open incident(s)`;
+  }
+
+  // { minSeverity } = block only if any open incident meets or exceeds that severity
+  if (requireClean.minSeverity) {
+    const threshold = SEVERITY_ORDER.indexOf(requireClean.minSeverity);
+    const incidents = trust.incidents_detail || [];
+    const blocking = incidents.filter(inc =>
+      SEVERITY_ORDER.indexOf(inc.severity || 'medium') >= threshold
+    );
+    if (blocking.length > 0) {
+      return `Agent has ${blocking.length} open incident(s) at or above severity '${requireClean.minSeverity}'`;
+    }
+    return null;
+  }
+
+  return null;
+}
+const DEFAULT_CACHE_TTL = 300; // 5 minutes
+
+// Simple LRU cache
+class Cache {
+  constructor(ttlSeconds = DEFAULT_CACHE_TTL) {
+    this.cache = new Map();
+    this.ttl = ttlSeconds * 1000;
+  }
+
+  get(key) {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expiry) {
+      this.cache.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+
+  set(key, value) {
+    this.cache.set(key, {
+      value,
+      expiry: Date.now() + this.ttl
+    });
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+export class Provenance {
+
+  constructor({
+    apiUrl,
+    cacheTTL = DEFAULT_CACHE_TTL,
+    onApiError = 'throw' // 'throw' | 'allow' | 'deny'
+  } = {}) {
+    // Choosing an index is choosing whom to trust about standing. That is the
+    // caller's decision, so it is never made for them.
+    if (typeof apiUrl !== 'string' || !apiUrl) {
+      throw new Error('Provenance index client: apiUrl is required — name the index you choose to trust');
+    }
+    this.apiUrl = apiUrl.replace(/\/$/, '');
+    this.cache = new Cache(cacheTTL);
+    this.onApiError = onApiError;
+  }
+
+  // ── Main method — the one most receiving systems need ────────────────────
+
+  /**
+   * Check an agent's trust profile.
+   *
+   * @param {string} provenanceId  e.g. "provenance:github:alice/research-assistant"
+   * @returns {object} trust summary
+   *
+   * Example:
+   *   const trust = await index.check('provenance:github:alice/research-assistant');
+   *   // {
+   *   //   found: true,
+   *   //   declared: true,            — has PROVENANCE.yml
+   *   //   identity_verified: true,   — cryptographic proof of ownership
+   *   //   age_days: 142,             — how long this agent has existed publicly
+   *   //   confidence: 0.9,           — internal signal, use declared/identity_verified for trust decisions
+   *   //   capabilities: ['read:web', 'write:summaries'],
+   *   //   constraints: ['no:financial:transact', 'no:pii'],
+   *   //   incidents: 0,              — open/investigating only; resolved don't block gate()
+   *   //   model: { provider: 'anthropic', model_id: 'claude-sonnet-4-5' },
+   *   //   status: 'active',
+   *   // }
+   */
+  async check(provenanceId) {
+    // Check cache first
+    const cached = this.cache.get(provenanceId);
+    if (cached) return cached;
+
+    const path = this._idToPath(provenanceId);
+    try {
+      const res = await fetch(`${this.apiUrl}/api/agent/${path}`);
+      if (res.status === 404) {
+        const notFound = { found: false, provenance_id: provenanceId };
+        this.cache.set(provenanceId, notFound);
+        return notFound;
+      }
+      if (!res.ok) throw new Error(`Provenance API error: ${res.status}`);
+      const data = await res.json();
+
+      const result = {
+        found: true,
+        provenance_id: data.provenance_id,
+        platform: data.platform,
+        name: data.name,
+        declared: data.declared,
+        identity_verified: data.identity_verified || false,
+        confidence: data.confidence,
+        age_days: data.timestamps?.first_seen
+          ? Math.floor((Date.now() - new Date(data.timestamps.first_seen)) / 86400000)
+          : null,
+        capabilities: data.capabilities || [],
+        constraints: data.constraints || [],
+        incidents: data.incident_count || 0,
+        incidents_detail: data.incidents || [],
+        resolved_incidents: data.resolved_incidents || [],
+        model: data.model || null,
+        status: data.status || 'unknown',
+        first_seen: data.timestamps?.first_seen || null,
+        url: data.url,
+        public_key: data.public_key || null,
+      };
+
+      // Cache the result
+      this.cache.set(provenanceId, result);
+      return result;
+    } catch (e) {
+      throw new Error(`Provenance.check failed: ${e.message}`);
+    }
+  }
+
+  // ── Convenience guard methods — boolean checks ───────────────────────────
+
+  /**
+   * Returns true if the agent has publicly committed to a constraint.
+   *
+   * Example:
+   *   if (!await index.hasConstraint(id, 'no:financial:transact')) {
+   *     throw new Error('Agent not cleared for financial operations');
+   *   }
+   */
+  async hasConstraint(provenanceId, constraint) {
+    const trust = await this.check(provenanceId);
+    return trust.found && trust.constraints.includes(constraint);
+  }
+
+  /**
+   * Returns true if the agent has declared a capability.
+   */
+  async hasCapability(provenanceId, capability) {
+    const trust = await this.check(provenanceId);
+    return trust.found && trust.capabilities.includes(capability);
+  }
+
+  /**
+   * Returns true if the agent has no open incidents.
+   */
+  async isClean(provenanceId) {
+    const trust = await this.check(provenanceId);
+    return trust.found && trust.incidents === 0 && trust.status === 'active';
+  }
+
+  /**
+   * Returns true if the agent has existed for at least minDays.
+   * Age is a proxy for reliability — a 6-month-old agent with no incidents
+   * is more trustworthy than a brand-new one.
+   */
+  async isOldEnough(provenanceId, minDays) {
+    const trust = await this.check(provenanceId);
+    return trust.found && trust.age_days !== null && trust.age_days >= minDays;
+  }
+
+  // ── Cryptographic identity verification ──────────────────────────────────
+
+  /**
+   * Verify that a running agent cryptographically owns the identity it claims.
+   *
+   * This closes the gap between "a repo declares this identity" and "the agent
+   * talking to you actually controls that repo's private key."
+   *
+   * Protocol (challenge-response):
+   *   1. Receiving system generates a nonce:  const nonce = crypto.randomUUID()
+   *   2. Receiving system sends nonce to agent
+   *   3. Agent signs: signAgentChallenge(privateKey, provenanceId, nonce) → signature
+   *   4. Receiving system verifies: await index.verifySignature(id, nonce, signature)
+   *
+   * @param {string} provenanceId     e.g. "provenance:github:alice/research-assistant"
+   * @param {string} nonce            The nonce you sent to the agent (UUID or random string)
+   * @param {string} signatureBase64  Base64 signature returned by the agent
+   * @returns {{ verified: boolean, reason: string | null }}
+   *
+   * Example:
+   *   const nonce = crypto.randomUUID();
+   *   // ... send nonce to agent, receive signature back ...
+   *   const result = await index.verifySignature(
+   *     'provenance:github:alice/research-assistant',
+   *     nonce,
+   *     agentSignature
+   *   );
+   *   if (!result.verified) throw new Error(`Identity check failed: ${result.reason}`);
+   */
+  async verifySignature(provenanceId, nonce, signatureBase64) {
+    let trust;
+    try {
+      trust = await this.check(provenanceId);
+    } catch (e) {
+      return { verified: false, reason: `Could not fetch agent profile: ${e.message}` };
+    }
+
+    if (!trust.found) {
+      return { verified: false, reason: 'Agent not found in this index' };
+    }
+    if (!trust.public_key) {
+      return { verified: false, reason: 'Agent has no public key registered in PROVENANCE.yml' };
+    }
+
+    // Domain-separated challenge form — what provenance-middleware and
+    // signAgentChallenge produce. The legacy "<id>:<nonce>" form is not
+    // accepted: an endpoint signing it also signs revocations.
+    const verified = await verifyAgentChallenge(trust.public_key, provenanceId, nonce, signatureBase64);
+    return { verified, reason: verified ? null : 'Signature is invalid' };
+  }
+
+  // ── Gate method — combine all checks in one call ─────────────────────────
+
+  /**
+   * Run all your trust requirements in one call.
+   * Returns { allowed, reason, trust }.
+   *
+   * requireClean accepts:
+   *   - true                    block on any open incident (default)
+   *   - false                   ignore incidents entirely
+   *   - { minSeverity }         block only if any open incident meets or exceeds severity
+   *                             severity order: low < medium < high < critical
+   *                             e.g. { minSeverity: 'high' } allows low/medium incidents
+   *
+   * Example:
+   *   const result = await index.gate('provenance:github:alice/agent', {
+   *     requireDeclared: true,
+   *     requireConstraints: ['no:financial:transact', 'no:pii'],
+   *     requireClean: { minSeverity: 'high' },
+   *     requireMinAge: 30,
+   *     requireMinConfidence: 0.7,
+   *   });
+   *
+   *   if (!result.allowed) {
+   *     return res.status(403).json({ error: result.reason });
+   *   }
+   */
+  async gate(provenanceId, {
+    requireDeclared = false,
+    requireVerified = false,
+    requireConstraints = [],
+    requireCapabilities = [],
+    requireClean = true,
+    requireMinAge = 0,
+    requireMinConfidence = 0,
+    requireSignedProof = null,
+    // { nonce: string, signature: string }
+    // When provided, cryptographically verifies the agent controls its declared
+    // private key. The agent must have signed the challenge with signAgentChallenge.
+    onApiError, // Override instance default if provided
+  } = {}) {
+    const errorPolicy = onApiError || this.onApiError;
+    let trust;
+    try {
+      trust = await this.check(provenanceId);
+    } catch (e) {
+      // Handle API failures based on policy
+      if (errorPolicy === 'allow') {
+        return { 
+          allowed: true, 
+          reason: 'Verification skipped (API unavailable)', 
+          trust: null,
+          fallback: true 
+        };
+      }
+      if (errorPolicy === 'deny') {
+        return { 
+          allowed: false, 
+          reason: `Verification failed (API unavailable): ${e.message}`, 
+          trust: null,
+          fallback: true 
+        };
+      }
+      // errorPolicy === 'throw'
+      throw e;
+    }
+
+    if (!trust.found) {
+      return { allowed: false, reason: 'Agent not found in this index', trust };
+    }
+    if (trust.status !== 'active') {
+      return { allowed: false, reason: `Agent status is ${trust.status}`, trust };
+    }
+    if (requireDeclared && !trust.declared) {
+      return { allowed: false, reason: 'Agent has not declared a PROVENANCE.yml file', trust };
+    }
+    if (requireVerified && !trust.identity_verified) {
+      return { allowed: false, reason: 'Agent identity is not cryptographically verified', trust };
+    }
+    if (requireClean) {
+      const blocked = _evaluateClean(requireClean, trust);
+      if (blocked) return { allowed: false, reason: blocked, trust };
+    }
+    if (requireMinConfidence && trust.confidence < requireMinConfidence) {
+      return { allowed: false, reason: `Agent confidence ${trust.confidence} below required ${requireMinConfidence}`, trust };
+    }
+    if (requireMinAge && (trust.age_days === null || trust.age_days < requireMinAge)) {
+      return { allowed: false, reason: `Agent is ${trust.age_days ?? 0} days old, minimum is ${requireMinAge}`, trust };
+    }
+    for (const constraint of requireConstraints) {
+      if (!trust.constraints.includes(constraint)) {
+        return { allowed: false, reason: `Agent has not committed to constraint: ${constraint}`, trust };
+      }
+    }
+    for (const capability of requireCapabilities) {
+      if (!trust.capabilities.includes(capability)) {
+        return { allowed: false, reason: `Agent does not declare capability: ${capability}`, trust };
+      }
+    }
+    if (requireSignedProof) {
+      const { nonce, signature } = requireSignedProof;
+      const result = await this.verifySignature(provenanceId, nonce, signature);
+      if (!result.verified) {
+        return { allowed: false, reason: `Cryptographic identity verification failed: ${result.reason}`, trust };
+      }
+    }
+
+    return { allowed: true, reason: null, trust };
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+
+  /**
+   * Search for agents by capabilities, constraints, platform etc.
+   *
+   * Example:
+   *   const agents = await index.search({
+   *     capabilities: ['read:web'],
+   *     constraints: ['no:financial:transact'],
+   *     declared: true,
+   *   });
+   */
+  async search(params = {}) {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.platform) qs.set('platform', params.platform);
+    if (params.capabilities?.length) qs.set('capabilities', params.capabilities.join(','));
+    if (params.constraints?.length) qs.set('constraints', params.constraints.join(','));
+    if (params.declared !== undefined) qs.set('declared', String(params.declared));
+    if (params.minConfidence) qs.set('min_confidence', String(params.minConfidence));
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/search?${qs}`);
+      if (!res.ok) throw new Error(`Provenance API error: ${res.status}`);
+      return res.json();
+    } catch (e) {
+      throw new Error(`Provenance.search failed: ${e.message}`);
+    }
+  }
+
+  // ── Batch operations ────────────────────────────────────────────────────
+
+  /**
+   * Check multiple agents in a single request.
+   * More efficient than calling check() multiple times.
+   *
+   * @param {string[]} provenanceIds - Array of provenance IDs (max 50)
+   * @returns {object} Map of provenance_id → trust profile
+   */
+  async checkBatch(provenanceIds) {
+    if (!Array.isArray(provenanceIds) || provenanceIds.length === 0) {
+      throw new Error('provenanceIds must be a non-empty array');
+    }
+    if (provenanceIds.length > 50) {
+      throw new Error('Maximum 50 IDs per batch request');
+    }
+
+    // Check cache first, collect uncached IDs
+    const results = {};
+    const uncached = [];
+
+    for (const id of provenanceIds) {
+      const cached = this.cache.get(id);
+      if (cached) {
+        results[id] = cached;
+      } else {
+        uncached.push(id);
+      }
+    }
+
+    // If all cached, return immediately
+    if (uncached.length === 0) {
+      return results;
+    }
+
+    // Fetch uncached from API
+    try {
+      const res = await fetch(`${this.apiUrl}/api/agents/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: uncached }),
+      });
+
+      if (!res.ok) throw new Error(`Provenance API error: ${res.status}`);
+      
+      const data = await res.json();
+
+      // Cache and merge results
+      for (const id of uncached) {
+        const profile = data.results?.[id] || { found: false, provenance_id: id };
+        this.cache.set(id, profile);
+        results[id] = profile;
+      }
+
+      return results;
+    } catch (e) {
+      throw new Error(`Provenance.checkBatch failed: ${e.message}`);
+    }
+  }
+
+  /**
+   * Gate multiple agents in a single request.
+   *
+   * @param {string[]} provenanceIds - Array of provenance IDs
+   * @param {object} options - Same options as gate()
+   * @returns {object} Map of provenance_id → gate result
+   */
+  async gateBatch(provenanceIds, options = {}) {
+    const profiles = await this.checkBatch(provenanceIds);
+    const results = {};
+
+    for (const id of provenanceIds) {
+      const trust = profiles[id];
+      results[id] = this._evaluateGate(trust, options);
+    }
+
+    return results;
+  }
+
+  // Internal: evaluate gate rules against a trust profile
+  _evaluateGate(trust, options) {
+    const {
+      requireDeclared = false,
+      requireVerified = false,
+      requireConstraints = [],
+      requireCapabilities = [],
+      requireClean = true,
+      requireMinAge = 0,
+      requireMinConfidence = 0,
+    } = options;
+
+    if (!trust || !trust.found) {
+      return { allowed: false, reason: 'Agent not found in this index', trust };
+    }
+    if (trust.status !== 'active') {
+      return { allowed: false, reason: `Agent status is ${trust.status}`, trust };
+    }
+    if (requireDeclared && !trust.declared) {
+      return { allowed: false, reason: 'Agent has not declared a PROVENANCE.yml file', trust };
+    }
+    if (requireVerified && !trust.identity_verified) {
+      return { allowed: false, reason: 'Agent identity is not cryptographically verified', trust };
+    }
+    for (const c of requireConstraints) {
+      if (!trust.constraints?.includes(c)) {
+        return { allowed: false, reason: `Agent has not committed to constraint: ${c}`, trust };
+      }
+    }
+    for (const c of requireCapabilities) {
+      if (!trust.capabilities?.includes(c)) {
+        return { allowed: false, reason: `Agent does not have capability: ${c}`, trust };
+      }
+    }
+    if (requireClean) {
+      const blocked = _evaluateClean(requireClean, trust);
+      if (blocked) return { allowed: false, reason: blocked, trust };
+    }
+    if (requireMinAge > 0 && (trust.age_days || 0) < requireMinAge) {
+      return { allowed: false, reason: `Agent is only ${trust.age_days || 0} days old (minimum: ${requireMinAge})`, trust };
+    }
+    if (requireMinConfidence > 0 && (trust.confidence || 0) < requireMinConfidence) {
+      return { allowed: false, reason: `Agent confidence ${trust.confidence} below minimum ${requireMinConfidence}`, trust };
+    }
+
+    return { allowed: true, reason: null, trust };
+  }
+
+  // ── Internal ──────────────────────────────────────────────────────────────
+
+  _idToPath(provenanceId) {
+    // provenance:github:alice/research-assistant
+    // → github/alice/research-assistant
+    return provenanceId.replace('provenance:', '').replace(':', '/');
+  }
+
+  // ── Self-registration ─────────────────────────────────────────────────────
+
+  /**
+   * Register or update this agent in the Provenance index.
+   * Call once at agent startup — idempotent, safe to call on every boot.
+   *
+   * To register with cryptographic proof (identity_verified: true, confidence: 1.0),
+   * provide public_key and signed_challenge:
+   *   import { signChallenge } from 'provenance-protocol/keygen';
+   *   const signed_challenge = signChallenge(process.env.PROVENANCE_PRIVATE_KEY, id, 'REGISTER');
+   *
+   * @param {object} profile
+   * @param {string} profile.id              provenance:<platform>:<owner>/<name>
+   *                                         Platforms: github, huggingface, npm, pypi, clawmarket, custom
+   *                                         Use "custom" for private agents without a public repo.
+   * @param {string} [profile.url]           Canonical URL. Optional for custom platform agents.
+   * @param {string} [profile.readme_summary] 2-3 sentence plain-English description shown on profile.
+   *                                          For private agents without a README — write it yourself.
+   * @param {string} [profile.name]          Display name
+   * @param {string} [profile.description]   One-sentence description
+   * @param {string[]} [profile.capabilities]
+   * @param {string[]} [profile.constraints]
+   * @param {string} [profile.model_provider]
+   * @param {string} [profile.model_id]
+   * @param {string} [profile.contact_url]
+   * @param {string} [profile.ajp_endpoint]
+   * @param {string} [profile.public_key]    Ed25519 SPKI DER public key (base64)
+   * @param {string} [profile.signed_challenge] Signature of `${id}:REGISTER` — required with public_key
+   * @param {string} [profile.version]
+   * @returns {{ created: boolean, updated: boolean, agent: object }}
+   */
+  async register(profile = {}) {
+    const { id, ...rest } = profile;
+    if (!id) throw new Error('profile.id is required');
+
+    try {
+      const res = await fetch(`${this.apiUrl}/api/agents/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provenance_id: id, ...rest }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Registration failed: ${res.status}`);
+      }
+      return res.json();
+    } catch (e) {
+      throw new Error(`Provenance.register failed: ${e.message}`);
+    }
+  }
+}

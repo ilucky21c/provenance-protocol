@@ -1,5 +1,5 @@
 # Provenance Protocol Specification
-**Versions 0.1 and 0.2**
+**Declarations 0.1 and 0.2 · Attestations 0.1**
 
 ---
 
@@ -35,19 +35,32 @@ ClawMarket — but there is no standard way to answer basic questions:
 without anyone needing to manually curate anything.
 
 It is the `robots.txt` of the agent internet. A simple convention that
-benefits everyone: developers get discoverability, receiving systems get
-trust signals, the ecosystem gets a shared foundation.
+benefits everyone: builders state what their agent is once and every system
+can read it; receiving systems can check it without asking anyone; the
+ecosystem gets a shared foundation that no single service owns.
+
+The standard has two documents:
+
+- a **declaration** — what an agent says about itself, published and signed by
+  whoever is answerable for it; and
+- an **attestation** — what a third party says about an agent, signed by that
+  third party.
+
+Both verify offline. Nothing in this specification requires contacting any
+particular service.
 
 ---
 
 ## The File
 
-Place a file named exactly `PROVENANCE.yml` in the root of your repository.
+Place a file named exactly `PROVENANCE.yml` in the root of your repository,
+or serve the declaration from your own domain — see
+[Where a declaration lives](#where-a-declaration-lives).
 
 ### Minimal valid PROVENANCE.yml
 
 ```yaml
-provenance: "0.1"
+provenance: "0.2"
 name: "Research Assistant"
 description: "Searches the web and summarizes academic papers on a given topic."
 ```
@@ -60,10 +73,10 @@ Three lines. That is the minimum. Everything else is optional but valuable.
 
 ```yaml
 # PROVENANCE.yml
-# Provenance Protocol v0.1
-# https://getprovenance.dev/spec
+# Provenance Protocol 0.2
+# https://github.com/ilucky21c/provenance-protocol/blob/main/SPEC.md
 
-provenance: "0.1"
+provenance: "0.2"
 
 # ── Identity ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +87,7 @@ description: >
   summaries with citations. Designed for researchers and analysts.
 
 # ── Intelligence ──────────────────────────────────────────────────────────────
-# When model changes, Provenance detects behavioral drift automatically
+# A change here is a material change: anyone watching the declaration sees it
 
 model:
   provider: "anthropic"
@@ -89,7 +102,7 @@ capabilities:
   - write:summaries
 
 # ── Constraints — what this agent will NEVER do ───────────────────────────────
-# These are public commitments. Recorded permanently. Violations are detectable.
+# These are public commitments. The signature makes deleting one detectable.
 
 constraints:
   - no:write:external
@@ -111,20 +124,21 @@ contact:
   email: "agent-issues@alice.dev"
 
 # ── Skills ────────────────────────────────────────────────────────────────────
-# External skills this agent uses — Provenance tracks these as dependencies
+# External skills this agent depends on
 
 skills:
   - id: "web-search-001"
     source: "skillsmp"
     url: "https://skillsmp.com/skills/web-search-001"
 
-# ── Provenance ────────────────────────────────────────────────────────────────
-# Links this file to your entry in the Provenance index
+# ── Provenance ID ─────────────────────────────────────────────────────────────
+# Names where this declaration is published. See Provenance IDs.
 
 provenance_id: "provenance:github:alice/research-assistant"
 
 # ── Identity — optional, makes this file tamper-evident ───────────────────────
-# Signature covers "<provenance_id>:<public_key>". See Signing and Verification.
+# In 0.2 the signature covers every field above. Generate it with
+# `npx provenance-protocol sign`. See Signing and Verification.
 
 identity:
   public_key: "MCowBQYDK2VwAyEA..."
@@ -140,7 +154,7 @@ identity:
 
 | Field | Type | Description |
 |---|---|---|
-| `provenance` | string | Spec version. Currently `"0.1"` |
+| `provenance` | string | Spec version: `"0.2"` for new declarations, `"0.1"` legacy |
 | `name` | string | Human-readable name for this agent |
 | `description` | string | What this agent does, in plain language |
 
@@ -164,17 +178,20 @@ identity:
 | `contact.email` | string | Contact for issues or abuse reports |
 | `skills` | list | SkillsMP or other skills this agent depends on |
 | `delegates` | list | Sub-agents this orchestrator spawns |
-| `provenance_id` | string | Links to your Provenance index entry |
+| `provenance_id` | string | Names where this declaration is published — see Provenance IDs |
 | `runtime.trigger` | string | `api` `webhook` `schedule` `event` |
 | `identity.public_key` | string | Base64 SPKI DER Ed25519 public key |
-| `identity.signature` | string | Base64 Ed25519 signature over `<provenance_id>:<public_key>`. Optional — see Signing and Verification |
-| `identity.algorithm` | string | Always `ed25519` in v0.1 |
+| `identity.signature` | string | Base64 Ed25519 signature. In 0.2 over the whole declaration; in 0.1 over `<provenance_id>:<public_key>` only. Optional — see Signing and Verification |
+| `identity.algorithm` | string | Always `ed25519` |
+| `ajp.endpoint` | string | Where this agent accepts jobs under the Agent Job Protocol |
 
 ---
 
 ## Capability Vocabulary
 
-Standard capability strings. Provenance indexes and filters by them.
+Standard capability strings. Using them lets any receiving system filter on
+them without a translation table. The same list is published machine-readably
+as `vocabulary.json`.
 Custom capabilities allowed — prefix with your domain: `acme:custom-capability`
 
 ### Read
@@ -234,16 +251,18 @@ constraints:
 
 **Constraints are the most powerful field in PROVENANCE.yml.**
 A receiving system that requires `no:financial:transact` can filter for it.
-An agent that publicly commits to a constraint and violates it gets a
-permanent incident on its Provenance record. The commitment is real.
+Under 0.2 the constraint is covered by the signature, so it cannot be quietly
+deleted, and a party that sees it broken can say so in a signed
+[attestation](#attestations) naming the constraint. The commitment is real.
 
 ---
 
 ## Provenance IDs
 
-Every agent in the Provenance index has a stable identifier derived from
-where it lives publicly. No registration required — the ID is computed
-deterministically from the public URL.
+Every agent has a stable identifier derived from where its declaration is
+published. No registration required — the ID is computed deterministically
+from the public location, and only whoever controls that location can publish
+there.
 
 ```
 provenance:github:owner/repo
@@ -275,27 +294,35 @@ verified as its operator's: the signature would check out while the location
 check reported `unchecked`, so no verifier could conclude the declaration was
 genuinely theirs.
 
-Add `provenance_id` to your PROVENANCE.yml to link your file to your
-index entry and claim your agent profile.
+Add `provenance_id` to your PROVENANCE.yml so any verifier can tie the file
+to the location it names.
 
 ---
 
-## How Provenance uses PROVENANCE.yml
+## Where a declaration lives
 
-When Provenance discovers or crawls an agent repository it:
+Anyone holding a provenance id can find the declaration without asking an
+index. The identifier names the location:
 
-1. Reads `PROVENANCE.yml` if present
-2. Hashes the file content — future changes are detectable
-3. Records the discovery in the tamper-evident public log
-4. Indexes capabilities and constraints for search
-5. Monitors for changes — what changed, when, from what to what
-6. Computes the Provenance ID from the repository URL
-7. Surfaces the agent in search results for capability queries
+| Identifier | Declaration is published at |
+|---|---|
+| `provenance:domain:<host>` | `https://<host>/.well-known/provenance.json` |
+| `provenance:domain:<host>/<path>` | `https://<host>/<path>/.well-known/provenance.json` |
+| `provenance:github:<owner>/<repo>` | `PROVENANCE.yml` at the root of the default branch |
+| other platforms | inside the published package or repository; the location must be supplied |
 
-Without PROVENANCE.yml, Provenance still indexes the agent from code
-signals — framework imports, package keywords, repository topics — but
-with lower confidence. Adding PROVENANCE.yml upgrades the profile from
-inferred to declared.
+A declaration served from a domain is JSON — the same fields as the YAML file,
+so the same signature verifies either form. It MUST be served over HTTPS, and a
+verifier SHOULD NOT follow a redirect to another host: the location check is
+what ties the document to its operator.
+
+The agent MAY also expose a live challenge endpoint at
+`https://<host>/.well-known/provenance/challenge` (see
+[Live proof of key control](#live-proof-of-key-control)).
+
+Services that crawl, index or monitor declarations are applications of the
+standard. They may add a great deal — search, history, alerts — but a
+declaration's meaning never depends on them.
 
 ---
 
@@ -351,9 +378,16 @@ The signed message is the UTF-8 encoding of:
 provenance-declaration-v1:<canonical JSON of the declaration>
 ```
 
-The canonical JSON is produced from the **parsed** declaration, with
-`identity.signature` removed — it cannot cover itself — and with object keys
-sorted by Unicode code point recursively and no insignificant whitespace.
+The canonical JSON is the **JSON Canonicalization Scheme (JCS, RFC 8785)**
+applied to the **parsed** declaration with `identity.signature` removed — it
+cannot cover itself. In short: object keys sorted by their UTF-16 code units at
+every depth, no insignificant whitespace, and strings and numbers serialised as
+ECMAScript `JSON.stringify` does. Using a published scheme means any existing
+JCS library produces the same bytes; the same scheme is used to sign A2A Agent
+Cards.
+
+Every signature format in this specification — declarations, attestations,
+withdrawals — uses this canonical form.
 
 Because canonicalisation applies to the parsed value rather than the file's
 bytes, comments, indentation, quoting style and key order do not affect the
@@ -388,15 +422,20 @@ which coverage it checked so a reader is not misled about what was proven.
 
 ### How to verify
 
-1. Read `provenance_id` and the `identity` block.
-2. Reconstruct the message as `<provenance_id>:<public_key>`.
+1. Read the `provenance` version, `provenance_id` and the `identity` block.
+2. Build the signed message for that version — refuse an unknown version:
+   - **0.2:** `provenance-declaration-v1:` + the canonical JSON of the parsed
+     declaration with `identity.signature` removed.
+   - **0.1:** `<provenance_id>:<public_key>`.
 3. Import `public_key` as an Ed25519 SPKI DER key.
 4. Verify `signature` over the message bytes.
+5. Check that the declaration was retrieved from the location its
+   `provenance_id` names. A valid signature at the wrong location is
+   unverified.
 
 Ed25519 is deterministic (RFC 8032), so a correct implementation produces
 byte-identical signatures for the same key and message. The test vectors in
-`test-vectors/signatures-0.1.json` let you confirm this without contacting
-anyone.
+`test-vectors/` let you confirm this without contacting anyone.
 
 ### What verification proves — and what it does not
 
@@ -441,6 +480,8 @@ be presented as another:
 | Declaration (0.2) | `provenance-declaration-v1:<canonical JSON>` |
 | Live proof of key control | `provenance-challenge-v1:<provenance_id>:<nonce>` |
 | Revocation | `provenance-revocation-v1:<provenance_id>` |
+| Attestation | `provenance-attestation-v1:<canonical JSON>` |
+| Attestation withdrawal | `provenance-attestation-withdrawal-v1:<canonical JSON of {attestation_id, issuer}>` |
 
 This is not a precaution against something hypothetical. In 0.1 a challenge was
 signed as `<provenance_id>:<nonce>` and a revocation as
@@ -481,6 +522,130 @@ they would re-check any other freshness signal.
 
 ---
 
+## Attestations
+
+A declaration is what an agent says about itself. An **attestation** is what
+someone else says about it: a monitor recording what it observed, a platform
+recording a report it received, a reviewer recording an approval. The issuer
+signs it with its own key, and anyone can verify it offline without asking the
+issuer.
+
+Anyone may issue attestations. The standard defines the envelope and how to
+verify it; it does not decide whose attestations to trust. That is each
+verifier's choice, the same way each border decides which stamps it honours.
+
+### The envelope
+
+```json
+{
+  "attestation": "0.1",
+  "id": "att-0001",
+  "kind": "declaration-check",
+  "issuer": {
+    "provenance_id": "provenance:domain:attester.example",
+    "key_fingerprint": "9f2c…64 hex…"
+  },
+  "subject": {
+    "provenance_id": "provenance:github:example/research-agent",
+    "declaration_digest": "sha256:4be1…"
+  },
+  "issued_at": "2026-09-21T09:00:00Z",
+  "valid_until": "2026-09-24T09:00:00Z",
+  "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+  "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+  "claims": { "…": "kind-specific" },
+  "signature": "base64…"
+}
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `attestation` | yes | Format version. A verifier MUST refuse to guess at one it does not know. |
+| `id` | yes | Unique among this issuer's attestations. |
+| `kind` | yes | `declaration-check`, `report`, `decision`, or a custom kind prefixed with the issuer's domain (`example.com:pen-test`). |
+| `issuer.provenance_id` | yes | The issuer is an agent like any other: its own declaration publishes its public key. |
+| `issuer.key_fingerprint` | yes | SHA-256 of the issuer's public key (SPKI DER), hex. Names which key signed, so a rotation is visible. |
+| `subject.provenance_id` / `subject.url` | one of | The agent the attestation is about. `url` is for an agent observed without a declaration. |
+| `subject.declaration_digest` | per kind | Which state of the subject's declaration it is about: `sha256:` + hex SHA-256 of the declaration's 0.2 signing payload. Unchanged by formatting or signature; changed by any field. |
+| `issued_at`, `valid_until` | yes | RFC 3339 with an explicit offset. |
+| `scope` | yes | What this covers and does not, in plain language. It travels with the attestation. |
+| `status_url` | no | Where the issuer publishes withdrawals. |
+| `claims` | yes | Kind-specific content. |
+| `signature` | yes | Base64 Ed25519 over `provenance-attestation-v1:` + the canonical JSON of the attestation with `signature` removed — the same canonicalisation as a 0.2 declaration. |
+
+The schema is `schema/attestation-0.1.json`.
+
+### Core kinds
+
+**`declaration-check`** — the issuer fetched the subject's declaration and
+records what it found: `retrieved_from`, `retrieved_at`, `signature`
+(`declaration` / `identity` / `none` / `invalid`), `location`
+(`match` / `mismatch` / `unchecked`), the subject's `key_fingerprint`, and
+optionally `changes` since the `previous_digest` it saw. Requires
+`subject.declaration_digest`.
+
+**`report`** — an identified party reported something about the subject. The
+issuer attests **that the report was made**, by whom and when — not that it is
+true. `reporter` (with `disclosed: false` when the issuer holds the reporter's
+identity but does not publish it), `reported_at`, `category`, `relates_to`
+(the declared constraints or capabilities concerned, in the standard
+vocabulary), `summary`, `state` (`received` / `responded` / `disputed` /
+`withdrawn` / `resolved`) and the subject's `response`.
+
+**`decision`** — someone approved the subject for a use, or withdrew that
+approval: `outcome` (`approved` / `withdrawn`), `use`, `decided_at`,
+`decided_by`. Requires `subject.declaration_digest`, so the decision is pinned
+to the exact declared state it was made against — and a later change to the
+declaration is visibly a change to the basis of the decision.
+
+### Validity and expiry
+
+Every attestation expires. Absence of news cannot be carried in a document, so
+a short validity window is what makes staleness visible: when the issuer stops
+looking, its attestations stop being current.
+
+An issuer SHOULD NOT issue a window longer than it can honour — typically no
+more than twice the interval at which it re-checks. A window renewed many times
+within its own life can never lapse, and expiry then means nothing.
+
+A verifier MUST keep these outcomes apart:
+
+| Status | Meaning |
+|---|---|
+| `valid` | genuine, and inside its validity window |
+| `expired` | genuine, past `valid_until` — stale, not forged |
+| `not_yet_valid` | genuine, `issued_at` in the future (beyond clock tolerance) |
+| `invalid` | forged, altered, malformed, or signed by a key other than the one named |
+| `unchecked` | could not be checked — no issuer key, unknown version |
+
+The signature is checked **before** the dates. Anyone can write a date, so a
+forgery must always read as `invalid`, never as merely `expired`.
+
+### Finding the issuer's key
+
+The verifier needs the issuer's public key. The normal source is the issuer's
+own declaration, verified like any other and located from
+`issuer.provenance_id`. A verifier SHOULD pin the issuer's key fingerprint, and
+treat an attestation naming a different fingerprint as a key rotation by the
+issuer — to be accepted deliberately, not silently.
+
+### Withdrawal
+
+An issuer withdraws an attestation before it expires by signing
+`provenance-attestation-withdrawal-v1:` + the canonical JSON of
+`{"attestation_id": …, "issuer": …}` and publishing it at the attestation's
+`status_url`. Like key revocation, a withdrawal cannot be discovered offline;
+expiry is what bounds how long a withdrawn attestation can go unnoticed.
+
+### What an attestation proves
+
+A valid attestation proves that the issuer said this, when, and about which
+state of the subject. It does not prove the issuer is right. Issuers SHOULD
+attest facts they observed rather than conclusions about fitness, and say so
+in `scope`.
+
+---
+
 ## Conformance
 
 An implementation of this specification is conformant if it:
@@ -502,14 +667,20 @@ An implementation of this specification is conformant if it:
    refuses every one marked `invalid`.
 7. Treats a declaration whose `provenance_id` does not match its retrieval
    location as unverified.
+8. For attestations: refuses unknown `attestation` versions, checks the
+   signature before the validity window, keeps `valid`, `expired`,
+   `not_yet_valid`, `invalid` and `unchecked` distinct, and reproduces every
+   outcome in `test-vectors/attestations-0.1.json`.
 
-Points 6 and 7 are what make independent implementations agree. An
+Points 6 to 8 are what make independent implementations agree. An
 implementation that passes the test vectors interoperates with every other
 one that does, with no reference to any particular service.
 
-A reference implementation of offline verification ships in this repository as
-`provenance-protocol/verify`. It is one implementation, not the definition —
-the vectors are the definition.
+A reference implementation ships in this repository as the `provenance-protocol`
+package: verification, attestations and declaration location work offline in
+any JavaScript runtime with Web Crypto, and signing and schema validation in
+Node. It is one implementation, not the definition — the vectors are the
+definition.
 
 ---
 
@@ -550,32 +721,32 @@ by declaring a new version, never by reinterpreting an old one.
 ## FAQ
 
 **Do I have to register anywhere?**
-No. Provenance discovers agents automatically. Adding PROVENANCE.yml
-improves your profile but requires no account, no API key, no permission.
+No. Publish the declaration at the location your provenance id names and it
+can be found and verified by anyone. Indexes may list you; none is required.
 
-**What if I already have a file in my repo I want to keep private?**
-PROVENANCE.yml is only read from public repositories. Private repos
-are not crawled.
+**What if my agent has no public repository?**
+Serve the declaration from your own domain at
+`/.well-known/provenance.json` and use a `provenance:domain:` id. That is the
+path for most hosted services.
 
 **What if my constraints are inaccurate?**
-Constraints are public commitments. Be honest. A constraint you declare
-but violate becomes a permanent incident on your record.
+Constraints are public commitments. Be honest. Under 0.2 they are covered by
+your signature, and anyone who sees one broken can publish a signed report
+naming it.
 
 **Can I use custom capability strings?**
 Yes. Prefix with your domain: `acme:internal-tool`. Standard vocabulary
 recommended for interoperability.
 
 **What happens when I change my model?**
-Provenance detects it from the repository commit and from behavioral
-fingerprinting. The change is recorded — not penalized. Transparency
-is the point.
+Change the declaration and sign it again. Anyone watching it sees exactly which
+field changed. Transparency is the point.
 
-**What if my agent is on HuggingFace, not GitHub?**
-Same process. Add PROVENANCE.yml to your Space or model repository root.
-Provenance crawls HuggingFace the same way it crawls GitHub.
+**Who decides whose attestations count?**
+Each verifier. The standard makes every attestation checkable; trusting a
+particular issuer is a decision the standard deliberately leaves to the reader.
 
 ---
 
-*Provenance Protocol v0.1 — MIT License*
-*https://getprovenance.dev*
+*Provenance Protocol — MIT License*
 *https://github.com/ilucky21c/provenance-protocol*

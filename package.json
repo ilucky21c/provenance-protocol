@@ -1,7 +1,7 @@
 {
   "name": "provenance-protocol",
-  "version": "0.5.0",
-  "description": "The Provenance Protocol \u2014 open standard for AI agent identity \u2014 and its reference SDK",
+  "version": "0.6.0",
+  "description": "The Provenance Protocol — an open standard for AI agent identity — with offline verification, signing and attestations",
   "type": "module",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
@@ -13,29 +13,34 @@
       "types": "./src/index.d.ts",
       "import": "./src/index.js"
     },
+    "./verify": {
+      "types": "./src/verify.d.ts",
+      "import": "./src/verify.js"
+    },
     "./keygen": {
       "types": "./src/keygen.d.ts",
       "import": "./src/keygen.js"
     },
-    "./verify": {
-      "types": "./src/verify.d.ts",
-      "import": "./src/verify.js"
-    }
+    "./validate": {
+      "types": "./src/validate.d.ts",
+      "import": "./src/validate.js"
+    },
+    "./index-client": {
+      "types": "./src/index-client.d.ts",
+      "import": "./src/index-client.js"
+    },
+    "./schema/*": "./schema/*",
+    "./test-vectors/*": "./test-vectors/*",
+    "./vocabulary.json": "./vocabulary.json"
   },
   "files": [
-    "src/index.js",
-    "src/index.d.ts",
-    "src/keygen.js",
-    "src/keygen.d.ts",
-    "src/verify.d.ts",
-    "src/verify.js",
-    "src/cli.js",
+    "src/",
+    "schema/",
+    "test-vectors/",
+    "vocabulary.json",
     "README.md",
     "SPEC.md",
-    "schema/provenance-0.1.json",
-    "test-vectors/",
-    "src/canonical.js",
-    "schema/provenance-0.2.json"
+    "LICENSE"
   ],
   "keywords": [
     "ai-agent",
@@ -46,18 +51,22 @@
     "verification",
     "ed25519",
     "offline-verification",
-    "standard"
+    "standard",
+    "attestation"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/ilucky21c/provenance-protocol"
   },
-  "homepage": "https://getprovenance.dev",
+  "homepage": "https://github.com/ilucky21c/provenance-protocol#readme",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18"
   },
   "scripts": {
-    "test": "node test/verify.test.mjs && node test/declaration-signature.test.mjs && node test/payload-separation.test.mjs && node test/location.test.mjs"
+    "test": "node test/verify.test.mjs && node test/declaration-signature.test.mjs && node test/payload-separation.test.mjs && node test/location.test.mjs && node test/attestation.test.mjs && node test/check.test.mjs && node test/validate.test.mjs && node test/canonical.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
   }
 }

@@ -4,7 +4,7 @@
   "algorithm": "ed25519",
   "signing": {
     "payload": "the string \"provenance-declaration-v1:\" followed by the canonical JSON of the parsed declaration with identity.signature removed",
-    "canonicalisation": "object keys sorted by code point recursively, no insignificant whitespace, applied to the PARSED value so formatting and key order do not matter"
+    "canonicalisation": "JSON Canonicalization Scheme (JCS, RFC 8785): object keys sorted by UTF-16 code units recursively, no insignificant whitespace, applied to the PARSED value so formatting and key order do not matter"
   },
   "keypair": {
     "public_key": "MCowBQYDK2VwAyEAyuDQn/j1dbeAd288fU7lRV5cFcm7Zsm42jwCKy07N98=",

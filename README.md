@@ -1,307 +1,198 @@
 # provenance-protocol
 
 The Provenance Protocol: an open standard for declaring and verifying AI agent
-identity — and the reference SDK that implements it.
+identity — and a reference implementation of it.
 
-## The standard
-
-| | |
-|---|---|
-| [**SPEC.md**](./SPEC.md) | The specification. `PROVENANCE.yml`, the field reference, the capability vocabulary, signing and verification, conformance. |
-| [**schema/provenance-0.1.json**](./schema/provenance-0.1.json) | JSON Schema for validating a declaration. |
-| [**test-vectors/**](./test-vectors/) | Normative signature vectors. Pass these and you interoperate. |
-
-The specification is MIT-licensed and free to implement in any language,
-without permission or notification. A declaration can be read, validated and
-cryptographically verified **entirely offline** — no account, no API key, and
-no call to any service, this one included. Indexes, monitors and attesters are
-applications built on the standard, not part of it.
-
-## Offline verification
-
-No account, no API key, no call to any service — including this one.
-
-```js
-import { verifyDeclaration } from 'provenance-protocol/verify';
-import YAML from 'yaml';
-
-const result = await verifyDeclaration(YAML.parse(fileContents), {
-  retrievedFrom: 'https://github.com/alice/research-assistant',
-});
-
-result.valid        // the signature verifies against the key in the file
-result.coverage     // 'declaration' (0.2) | 'identity' (0.1)
-result.location     // 'match' | 'mismatch' | 'unchecked'
-result.trustworthy  // valid AND served from the location it claims
-result.fingerprint  // SHA-256 of the key — store it to detect rotation
-```
-
-`coverage` matters. Under spec **0.2** the signature covers the whole
-declaration, so deleting a constraint breaks it. Under **0.1** it covered only
-the identity and key — the declared capabilities and constraints were *not*
-protected, and a valid 0.1 signature says nothing about whether they were
-edited. Sign new declarations with 0.2:
-
-```js
-import { signDeclaration } from 'provenance-protocol/keygen';
-declaration.identity.signature = signDeclaration(privateKey, declaration);
-```
-
-A valid signature proves the declaration came from the holder of that private
-key and has not been altered. It does **not** prove who that holder is, that
-the declared capabilities are accurate, or that the declaration is current.
-That is why `trustworthy` also requires the location check: a signature is only
-the project owner's if the file was served from the project it names.
-
-Also exported: `verifyChallenge()` for live proof of key control against a key
-you already hold, `verifyRevocation()`, `checkLocation()` and `keyFingerprint()`.
-
-Declarations are YAML — parse them with whatever library you already use and
-pass the object. This module has no dependencies.
-
-## The SDK
-
-This package is one implementation. It adds what cannot be done offline:
-looking up an agent's current standing — open incidents, revocation, drift —
-before you let it in.
-
-Drop it into any receiving system — marketplace, API, agent orchestrator.
+An agent publishes a signed **declaration**: what it is, what it can do, what it
+will never do, and who answers for it. Third parties publish signed
+**attestations** about it: what they observed, what was reported, what they
+approved. Both verify **offline** — no account, no API key, and no call to any
+service. Nothing here depends on any particular company, this one included.
 
 ```bash
 npm install provenance-protocol
 ```
 
----
+## The standard
 
-## Quick start
-
-```js
-import { provenance } from 'provenance-protocol';
-
-// Check a single agent
-const trust = await provenance.check('provenance:github:alice/research-assistant');
-console.log(trust);
-// {
-//   found: true,
-//   identity: 'verified',       // 'inferred' | 'declared' | 'verified'
-//   identity_verified: true,
-//   declared: true,
-//   age_days: 142,
-//   capabilities: ['read:web', 'write:summaries'],
-//   constraints: ['no:financial:transact', 'no:pii'],
-//   incidents: 0,
-//   status: 'active'
-// }
-```
-
----
-
-## gate() — all checks in one call
-
-The most useful method for receiving systems.
-
-```js
-const result = await provenance.gate('provenance:github:alice/agent', {
-  requireDeclared: true,                                    // must have PROVENANCE.yml
-  requireVerified: true,                                    // must have identity_verified: true
-  requireConstraints: ['no:financial:transact', 'no:pii'], // must have committed to these
-  requireClean: true,                                       // no open incidents
-  requireMinAge: 30,                                        // must be at least 30 days old
-});
-
-if (!result.allowed) {
-  return res.status(403).json({ error: result.reason });
-  // e.g. "Agent has not committed to constraint: no:financial:transact"
-}
-
-// result.trust has the full profile if you need it
-```
-
----
-
-## Individual methods
-
-```js
-// Boolean checks
-await provenance.hasConstraint(id, 'no:financial:transact'); // → true/false
-await provenance.hasCapability(id, 'read:web');              // → true/false
-await provenance.isClean(id);                                // → true/false
-await provenance.isOldEnough(id, 90);                        // → true/false (90+ days)
-
-// Search for agents
-const results = await provenance.search({
-  capabilities: ['read:web'],
-  constraints: ['no:financial:transact'],
-  declared: true,
-  limit: 10,
-});
-```
-
----
-
-## Configuration
-
-```js
-import { Provenance } from 'provenance-protocol';
-
-const provenance = new Provenance({
-  apiUrl: 'https://your-own-provenance-instance.com',
-  cacheTTL: 300,        // Cache results for 5 minutes (default)
-  onApiError: 'deny'    // 'throw' | 'allow' | 'deny' (default: 'throw')
-});
-```
-
-### Caching
-
-All `check()` calls are automatically cached with a configurable TTL (default 5 minutes). This dramatically reduces latency and load when used in middleware or hot paths.
-
-### Fail-Safe Behavior
-
-When the Provenance API is unreachable, you can configure how `gate()` responds:
-
-- `'throw'` (default): Throws an error, letting your app handle it
-- `'deny'`: Returns `{ allowed: false }` — fail closed
-- `'allow'`: Returns `{ allowed: true }` — fail open
-
-```js
-// Fail closed if API is down
-const result = await provenance.gate(id, {
-  requireDeclared: true,
-  onApiError: 'deny'
-});
-
-if (result.fallback) {
-  console.warn('Verification skipped due to API unavailability');
-}
-```
-
----
-
-## What the trust object contains
-
-| Field | Type | Description |
-|---|---|---|
-| `found` | boolean | Agent exists in Provenance index |
-| `identity` | string | `'inferred'` \| `'declared'` \| `'verified'` — see below |
-| `identity_verified` | boolean | Cryptographic key ownership confirmed against a public URL |
-| `declared` | boolean | Agent has a PROVENANCE.yml (or registered via API with full fields) |
-| `age_days` | number | Days since first indexed |
-| `capabilities` | string[] | What the agent declares it can do |
-| `constraints` | string[] | What the agent has publicly committed never to do |
-| `incidents` | number | Number of open incidents |
-| `status` | string | `active` / `suspended` / `removed` |
-| `model` | object | `{ provider, model_id }` if declared |
-| `public_key` | string\|null | Base64 Ed25519 public key, if registered |
-| `ajp_endpoint` | string\|null | AJP job endpoint URL, if the agent accepts delegated jobs |
-| `first_seen` | string | ISO date of first public appearance |
-
-### Identity states
-
-| State | Meaning |
+| | |
 |---|---|
-| `inferred` | Indexed by crawler from a public repo. No PROVENANCE.yml, no self-registration. |
-| `declared` | Agent registered itself (or has PROVENANCE.yml) but without cryptographic key verification. |
-| `verified` | Agent registered with a keypair and the public key was confirmed against a publicly fetchable PROVENANCE.yml. **Independently auditable** — anyone can re-verify without trusting the Provenance registry. |
+| [**SPEC.md**](./SPEC.md) | The specification: declarations, where they live, signing and verification, attestations, conformance. |
+| [**schema/**](./schema/) | JSON Schemas for declarations (0.1, 0.2) and attestations (0.1). |
+| [**test-vectors/**](./test-vectors/) | Normative vectors. Pass these and you interoperate. |
+
+MIT-licensed. Implement it in any language, for any purpose, without permission
+or notification. Indexes, monitors and attesters are applications built on the
+standard, not part of it.
 
 ---
 
-## Registering your own agent
-
-### Public repo (GitHub / HuggingFace / npm)
-
-Push a `PROVENANCE.yml` containing your public key to the repo, then register. The server fetches the file and confirms the key — independently verifiable by anyone.
+## Accept an agent on the strength of its declaration
 
 ```js
-import { generateProvenanceKeyPair, signForProvenance, signChallenge } from 'provenance-protocol/keygen';
+import { checkDeclaration, locateDeclaration } from 'provenance-protocol';
 
-const { publicKey, privateKey } = generateProvenanceKeyPair();
-const provenanceId = 'provenance:github:your-org/your-agent';
+const url = locateDeclaration('provenance:domain:agent.example.com');
+// → https://agent.example.com/.well-known/provenance.json
 
-// Add to PROVENANCE.yml → commit → push, then:
-const signed_challenge = signChallenge(privateKey, provenanceId, 'REGISTER');
+const declaration = await (await fetch(url, { redirect: 'error' })).json();
 
-await provenance.register({
-  id: provenanceId,
-  url: 'https://github.com/your-org/your-agent',
-  name: 'Your Agent',
-  description: 'What it does',
-  capabilities: ['read:web', 'write:summaries'],
-  constraints: ['no:pii'],
-  public_key: publicKey,
-  signed_challenge,
+const { allowed, reason } = await checkDeclaration(declaration, {
+  retrievedFrom: url,
+  requireConstraints: ['no:financial:transact'],   // example — use your own
 });
-// → { created: true, agent: { identity: 'verified', identity_verified: true } }
+
+if (!allowed) throw new Error(reason);
 ```
 
-### Private agent (no public repo)
+`checkDeclaration` refuses unless the signature covers the whole declaration,
+the file was served from the location its id names, and it promises what you
+require. Every refusal says why. It answers *is this genuinely the operator's,
+and does it promise what I need?* — not *is it in good standing today*, which
+no document can carry and which comes from attesters you choose to trust.
 
-Use `provenance:custom:` platform. Host your `PROVENANCE.yml` at any public URL you control and pass it as `url` — this makes the identity independently verifiable. Without a `url`, verification is registry-dependent (key control only).
+GitHub-hosted declarations are YAML; parse them with any YAML library and pass
+the object.
+
+## Verify, in detail
 
 ```js
-const provenanceId = 'provenance:custom:your-org/your-agent';
-const signed_challenge = signChallenge(privateKey, provenanceId, 'REGISTER');
+import { verifyDeclaration } from 'provenance-protocol';
 
-await provenance.register({
-  id: provenanceId,
-  url: 'https://yourdomain.com/.well-known/provenance.yml', // optional but recommended
-  name: 'Your Agent',
-  description: 'What it does',
-  capabilities: ['read:web'],
-  constraints: ['no:pii'],
-  public_key: publicKey,
-  signed_challenge,
-});
-// → { created: true, agent: { identity: 'verified', identity_verified: true } }
+const result = await verifyDeclaration(declaration, { retrievedFrom: url });
+
+result.valid        // the signature verifies against the key in the file
+result.coverage     // 'declaration' (0.2) | 'identity' (0.1)
+result.location     // 'match' | 'mismatch' | 'unchecked'
+result.trustworthy  // valid AND served from the location it claims
+result.fingerprint  // SHA-256 of the key — pin it to detect rotation
 ```
 
-See [getprovenance.dev/docs#ai-quickstart](https://getprovenance.dev/docs#ai-quickstart) for full automated scripts.
+Under spec **0.2** the signature covers every field, so deleting a constraint
+breaks it. Under **0.1** it covered only the identity and key; a valid 0.1
+signature says nothing about whether the constraints were edited.
 
-## Revoking a compromised key
+## Attestations
+
+A signed statement by a third party about an agent. Verify it against the
+issuer's public key — normally from the issuer's own verified declaration.
 
 ```js
-import { signRevocation } from 'provenance-protocol/keygen';
+import { verifyAttestation } from 'provenance-protocol';
 
-const signed_challenge = signRevocation(process.env.PROVENANCE_PRIVATE_KEY, provenanceId);
+const r = await verifyAttestation(attestation, { issuerPublicKey });
 
-await fetch('https://getprovenance.dev/api/agents/revoke', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ provenance_id: provenanceId, signed_challenge }),
-});
-// Then generate a new keypair and re-register
+r.status  // 'valid' | 'expired' | 'not_yet_valid' | 'invalid' | 'unchecked'
 ```
 
----
+`expired` means genuine but stale; `invalid` means forged or altered. They are
+never confused: the signature is checked before the dates.
 
-## CLI
+Issuing one (Node):
+
+```js
+import { signAttestation } from 'provenance-protocol/keygen';
+import { keyFingerprint, declarationDigest } from 'provenance-protocol';
+
+const attestation = {
+  attestation: '0.1',
+  id: 'att-0001',
+  kind: 'declaration-check',
+  issuer: { provenance_id: 'provenance:domain:attester.example', key_fingerprint: await keyFingerprint(myPublicKey) },
+  subject: { provenance_id: declaration.provenance_id, declaration_digest: await declarationDigest(declaration) },
+  issued_at: '2026-09-21T09:00:00Z',
+  valid_until: '2026-09-24T09:00:00Z',
+  scope: 'Covers the declaration as retrieved at the stated time and location only.',
+  claims: { retrieved_from: url, retrieved_at: '2026-09-21T08:59:12Z', signature: 'declaration', location: 'match' },
+};
+attestation.signature = signAttestation(myPrivateKey, attestation);
+```
+
+## Sign your own declaration
+
+From the command line — no service involved:
 
 ```bash
-npx provenance-protocol keygen
-npx provenance-protocol register --id provenance:github:your-org/your-agent --url https://github.com/...
-npx provenance-protocol status provenance:github:alice/my-agent
-npx provenance-protocol validate PROVENANCE.yml
-npx provenance-protocol revoke --id provenance:github:your-org/your-agent
+npx provenance-protocol keygen            # once; keep the private key in your env
+PROVENANCE_PRIVATE_KEY=… npx provenance-protocol sign PROVENANCE.yml
+npx provenance-protocol verify provenance:domain:agent.example.com
+npx provenance-protocol validate
 ```
 
-Full CLI reference: [getprovenance.dev/docs#cli](https://getprovenance.dev/docs#cli)
+`sign` edits the file in place, keeps your comments, and reads the result back
+to confirm it verifies. For a hosted service,
+[`provenance-middleware`](https://github.com/ilucky21c/provenance-middleware)
+serves and signs the declaration at startup instead.
 
----
+Or in code:
 
-## Layers
+```js
+import { generateProvenanceKeyPair, signDeclaration } from 'provenance-protocol/keygen';
+declaration.identity.signature = signDeclaration(privateKey, declaration);
+```
 
-`provenance-protocol` is the identity layer. Protocols that build on it:
+Exit codes: `0` ok, `1` checked and failed, `2` could not check. "Could not
+check" is never reported as a failure, or as a pass.
+
+## Entry points
+
+| Import | Runs in | What |
+|---|---|---|
+| `provenance-protocol` | anywhere with Web Crypto | verify, check, locate, attestations |
+| `provenance-protocol/keygen` | Node | keys, signing declarations, challenges, attestations |
+| `provenance-protocol/validate` | Node | schema validation for declarations and attestations |
+| `provenance-protocol/index-client` | anywhere | client for an index service you choose (below) |
+
+The main entry has no dependencies. `yaml` is used only by the CLI.
+
+## Live proof of key control
+
+A signed file proves where the declaration came from. To check that the service
+answering you right now holds the key, send it a single-use nonce:
+
+```js
+import { verifyAgentChallenge } from 'provenance-protocol';
+const ok = await verifyAgentChallenge(publicKey, provenanceId, nonce, signature);
+```
+
+The agent answers with `signAgentChallenge` (or `provenance-middleware` does it
+for them).
+
+## Index client (optional)
+
+An index is a service that crawls or accepts registrations and answers
+questions about current standing — open incidents, revocation, age. It is an
+application of the standard, not part of it. You must name the one you trust;
+there is no default.
+
+```js
+import { Provenance } from 'provenance-protocol/index-client';
+
+const index = new Provenance({ apiUrl: 'https://index.example.com', onApiError: 'deny' });
+const result = await index.gate(provenanceId, { requireConstraints: ['no:pii'] });
+```
+
+The CLI's `register`, `status` and `revoke` commands likewise need
+`--index <url>` or `PROVENANCE_INDEX_URL`.
+
+## Upgrading from 0.5
+
+- The main entry is now offline. `Provenance` moved to
+  `provenance-protocol/index-client` and requires `apiUrl`; the default
+  `provenance` instance is gone.
+- The index client's `verifySignature` and `gate({ requireSignedProof })` now
+  expect the domain-separated challenge (`signAgentChallenge`), matching
+  `provenance-middleware`.
+- `provenance validate` runs locally against the bundled schema.
+- The schemas accept `provenance:domain:` identifiers and ignore unknown
+  top-level fields, as the conformance rules always required.
+
+## Related
 
 | Package | Purpose |
 |---|---|
-| `provenance-protocol` | Agent identity, trust, and registration (this package) |
-| [`ajp-protocol`](https://www.npmjs.com/package/ajp-protocol) | Agent Job Protocol — agent-to-agent job delegation |
+| [`provenance-middleware`](https://github.com/ilucky21c/provenance-middleware) | One line that makes a service serve and sign its own declaration |
+| [`provenance-action`](https://github.com/ilucky21c/provenance-action) | Verify a declaration in CI |
+| [`ajp-protocol`](https://github.com/ilucky21c/ajp-protocol) | Agent Job Protocol — agent-to-agent job delegation |
 
----
-
-## Full documentation
-
-[getprovenance.dev/docs](https://getprovenance.dev/docs)
-
----
-
-## MIT License — getprovenance.dev
+## MIT License

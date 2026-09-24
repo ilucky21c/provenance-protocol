@@ -17,8 +17,8 @@ export interface KeyPair {
 export function generateProvenanceKeyPair(): KeyPair;
 
 /**
- * Sign a challenge nonce from a receiving system.
- * Returns a base64-encoded signature over `${provenanceId}:${nonce}`.
+ * LEGACY (spec 0.1). Signs `${provenanceId}:${nonce}` — the same shape as a
+ * revocation, so never expose it to callers. Use signAgentChallenge.
  *
  * @param privateKeyBase64  Your PROVENANCE_PRIVATE_KEY (base64 PKCS8 DER)
  * @param provenanceId      Your agent's Provenance ID
@@ -27,7 +27,8 @@ export function generateProvenanceKeyPair(): KeyPair;
 export function signChallenge(privateKeyBase64: string, provenanceId: string, nonce: string): string;
 
 /**
- * Sign your PROVENANCE.yml identity claim.
+ * LEGACY (spec 0.1). Sign your PROVENANCE.yml identity claim. Covers only the
+ * identity and key, not the declared constraints — use signDeclaration.
  *
  * Produces the `identity.signature` value for PROVENANCE.yml.
  * Signs `${provenanceId}:${publicKeyBase64}` — binding the keypair to your specific agent ID.
@@ -41,9 +42,8 @@ export function signChallenge(privateKeyBase64: string, provenanceId: string, no
 export function signForProvenance(privateKeyBase64: string, provenanceId: string, publicKeyBase64: string): string;
 
 /**
- * Sign a revocation request — clears your agent's public key and identity_verified status.
- * Use when your private key is compromised or you're rotating keys.
- * Send the result as signed_challenge to POST /api/agents/revoke.
+ * LEGACY (spec 0.1). Sign a revocation as `${provenanceId}:REVOKE`, for services
+ * that still accept that form. Prefer signAgentRevocation.
  */
 export function signRevocation(privateKeyBase64: string, provenanceId: string): string;
 
@@ -73,3 +73,15 @@ export function signAgentChallenge(privateKeyBase64: string, provenanceId: strin
 
 /** Revoke a provenance id — domain-separated form. Takes no caller-supplied input. */
 export function signAgentRevocation(privateKeyBase64: string, provenanceId: string): string;
+
+/**
+ * Sign an attestation — a statement you, as issuer, make about another agent.
+ * Covers every field except `signature`. `issuer.key_fingerprint` must be the
+ * fingerprint of the signing key.
+ */
+export function signAttestation(privateKeyBase64: string, attestation: object): string;
+
+/** Withdraw an attestation you issued. Publish the result at its status_url. */
+export function signAttestationWithdrawal(
+  privateKeyBase64: string, issuerId: string, attestationId: string
+): string;

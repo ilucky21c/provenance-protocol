@@ -87,7 +87,7 @@
         "properties": {
           "provenance_id": {
             "type": "string",
-            "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket):.+$"
+            "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket|domain):.+$"
           },
           "purpose": {
             "type": "string",
@@ -174,8 +174,8 @@
     },
     "provenance_id": {
       "type": "string",
-      "description": "Your Provenance identifier \u2014 links this file to your index entry",
-      "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket):.+$"
+      "description": "Stable identifier naming where this declaration is published \u2014 see Provenance IDs in SPEC.md",
+      "pattern": "^provenance:(github|npm|pypi|huggingface|clawmarket|domain):.+$"
     },
     "identity": {
       "type": "object",
@@ -225,5 +225,5 @@
       "additionalProperties": false
     }
   },
-  "additionalProperties": false
+  "additionalProperties": true
 }

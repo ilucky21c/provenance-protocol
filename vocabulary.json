@@ -1,0 +1,40 @@
+{
+  "$comment": "Standard vocabulary for PROVENANCE.yml capabilities and constraints. Normative source: SPEC.md, Capability Vocabulary. Custom terms are allowed with a domain prefix (acme:custom-capability).",
+  "version": "0.2",
+  "capabilities": {
+    "read:web": "fetch public web content",
+    "read:files": "read local files",
+    "read:database": "query databases",
+    "read:email": "read email (requires auth)",
+    "read:calendar": "read calendar (requires auth)",
+    "read:code": "read code repositories",
+    "read:pdf": "parse PDF documents",
+    "read:images": "process images",
+    "read:audio": "process audio",
+    "write:files": "write local files",
+    "write:database": "write to databases",
+    "write:email": "send email",
+    "write:code": "modify code",
+    "write:summaries": "generate written content",
+    "write:external": "any external system write",
+    "execute:code": "run code in a sandbox",
+    "execute:terminal": "run terminal commands",
+    "execute:browser": "control a browser",
+    "financial:read": "read financial data",
+    "financial:transact": "initiate financial transactions",
+    "delegate:agents": "can spawn or hire sub-agents",
+    "delegate:humans": "can request human approval"
+  },
+  "constraints": {
+    "rule": "Any standard capability prefixed with no: is a standard constraint \u2014 a commitment never to exercise it.",
+    "additional": {
+      "no:pii": "will never collect personal data"
+    }
+  },
+  "namespaces": {
+    "ajp": {
+      "ajp:receiver": "accepts jobs under the Agent Job Protocol",
+      "ajp:sender": "sends jobs under the Agent Job Protocol"
+    }
+  }
+}

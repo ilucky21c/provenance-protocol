@@ -1,0 +1,360 @@
+{
+  "$comment": "Normative test vectors for Provenance attestations, format 0.1. Verify each with the issuer public key below at the given `now`.",
+  "format_version": "0.1",
+  "algorithm": "ed25519",
+  "signing": {
+    "payload": "the string \"provenance-attestation-v1:\" followed by the canonical JSON of the attestation with signature removed (same canonicalisation as declarations 0.2)"
+  },
+  "issuer": {
+    "provenance_id": "provenance:domain:attester.example",
+    "public_key": "MCowBQYDK2VwAyEA9oWvkINZuc4VfE5hn5ZrkzL23t1JAOwxo/ztml02OTM=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIEeBDQcnQ6Cc+1KA64V6+E9iZzCOgbPl1chIaVBCSAeH",
+    "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6",
+    "$comment": "Test key only. Never use in production."
+  },
+  "other_key": {
+    "public_key": "MCowBQYDK2VwAyEATGCilyej8m2foylEOLJc75q9wS+bG/pH8/RrQnr/J+w=",
+    "private_key": "MC4CAQAwBQYDK2VwBCIEILtuouePMbqtwsZPT7zpWKn8znb+nCItbE9lOqYxBmly",
+    "$comment": "Used to produce the wrong-key vectors."
+  },
+  "reference_payload": "provenance-attestation-v1:{\"attestation\":\"0.1\",\"claims\":{\"changes\":[],\"key_fingerprint\":\"6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a\",\"location\":\"match\",\"retrieved_at\":\"2026-09-21T08:59:12Z\",\"retrieved_from\":\"https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml\",\"signature\":\"declaration\"},\"id\":\"att-0001\",\"issued_at\":\"2026-09-21T09:00:00Z\",\"issuer\":{\"key_fingerprint\":\"60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6\",\"provenance_id\":\"provenance:domain:attester.example\"},\"kind\":\"declaration-check\",\"scope\":\"Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.\",\"status_url\":\"https://attester.example/.well-known/provenance/withdrawals\",\"subject\":{\"declaration_digest\":\"sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0\",\"provenance_id\":\"provenance:github:example/research-agent\"},\"valid_until\":\"2026-09-24T09:00:00Z\"}",
+  "declaration_digest": {
+    "$comment": "SHA-256 of the signing payload of the declaration-signature-valid declaration in declarations-0.2.json.",
+    "declaration_id": "declaration-signature-valid",
+    "digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+  },
+  "withdrawal": {
+    "issuer": "provenance:domain:attester.example",
+    "attestation_id": "att-0001",
+    "payload": "provenance-attestation-withdrawal-v1:{\"attestation_id\":\"att-0001\",\"issuer\":\"provenance:domain:attester.example\"}",
+    "signature": "okybB8zHrQu3ieANl7HWacOfSGa6enSB/1/qyxL2rzh0LX44g5Dm4iipgNvCYWOiu1BvIsQn65NHSTl+WDH8Dg==",
+    "expect": "valid"
+  },
+  "vectors": [
+    {
+      "id": "attestation-valid",
+      "expect": "valid",
+      "now": "2026-09-22T12:00:00Z",
+      "purpose": "a correctly signed declaration-check inside its window",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "7QW0l5mBCNir+uaHplVabyI70FVmn7zhTrrMFzwV5ldBsVf+y3RXSXiWC6iDzsMXtyb3HP9b1g7Blre5wUVwAA=="
+      }
+    },
+    {
+      "id": "attestation-report-valid",
+      "expect": "valid",
+      "now": "2026-09-22T12:00:00Z",
+      "purpose": "a report records who said what, and the subject's answer",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0002",
+        "kind": "report",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Records that the named party made this report on this date. Not a finding that the report is true.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "reporter": {
+            "name": "Example Marketplace Ltd",
+            "disclosed": true
+          },
+          "reported_at": "2026-09-20T15:30:00Z",
+          "category": "constraint-breach",
+          "relates_to": [
+            "no:pii"
+          ],
+          "summary": "Job output contained customer email addresses.",
+          "state": "disputed",
+          "response": "The addresses were present in the input the reporter supplied."
+        },
+        "signature": "WpKCQwVIz1dKvoN36UzlRmglbyZzSQLVR1ez8XMEywyzrflvvpbxrpJCbr8wrkdkU/4bWHu7jpEThFOeBArzAw=="
+      }
+    },
+    {
+      "id": "attestation-claims-tampered",
+      "expect": "invalid",
+      "now": "2026-09-22T12:00:00Z",
+      "purpose": "a claim altered after signing",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "mismatch",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "7QW0l5mBCNir+uaHplVabyI70FVmn7zhTrrMFzwV5ldBsVf+y3RXSXiWC6iDzsMXtyb3HP9b1g7Blre5wUVwAA=="
+      }
+    },
+    {
+      "id": "attestation-window-extended",
+      "expect": "invalid",
+      "now": "2026-09-25T12:00:00Z",
+      "purpose": "valid_until pushed out after signing, to revive an expired attestation",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-12-31T00:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "7QW0l5mBCNir+uaHplVabyI70FVmn7zhTrrMFzwV5ldBsVf+y3RXSXiWC6iDzsMXtyb3HP9b1g7Blre5wUVwAA=="
+      }
+    },
+    {
+      "id": "attestation-wrong-key",
+      "expect": "invalid",
+      "now": "2026-09-22T12:00:00Z",
+      "purpose": "signed by a different key while naming the issuer's fingerprint",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "Yul+G5uEguxvOtPrv6+KvopY6amhgdH65ssS0aNJRwbiBXXOZ/rYbQ7T3iky0BixtsE91FpSr1BPMm00NEbSAg=="
+      }
+    },
+    {
+      "id": "attestation-fingerprint-mismatch",
+      "expect": "invalid",
+      "now": "2026-09-22T12:00:00Z",
+      "purpose": "names a key other than the one supplied",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "cd3717fbf0c2070a67ed8509cd59b19336e27927e729a990205f172b8a4de763"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "jAZKwXLa7R1SeZpuILxE026kj6Y4RfDRvDXJdf06Kza1cqWAwlyS9Gj4t1cq3xc77loy35p+4CBV83GZSJw3Aw=="
+      }
+    },
+    {
+      "id": "attestation-expired",
+      "expect": "expired",
+      "now": "2026-09-25T12:00:00Z",
+      "purpose": "genuine, past valid_until: stale, not forged",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "7QW0l5mBCNir+uaHplVabyI70FVmn7zhTrrMFzwV5ldBsVf+y3RXSXiWC6iDzsMXtyb3HP9b1g7Blre5wUVwAA=="
+      }
+    },
+    {
+      "id": "attestation-forged-and-expired",
+      "expect": "invalid",
+      "now": "2026-09-25T12:00:00Z",
+      "purpose": "a forgery must read as forged, never as merely expired",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "Yul+G5uEguxvOtPrv6+KvopY6amhgdH65ssS0aNJRwbiBXXOZ/rYbQ7T3iky0BixtsE91FpSr1BPMm00NEbSAg=="
+      }
+    },
+    {
+      "id": "attestation-not-yet-valid",
+      "expect": "not_yet_valid",
+      "now": "2026-09-20T12:00:00Z",
+      "purpose": "issued_at in the future",
+      "attestation": {
+        "attestation": "0.1",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "7QW0l5mBCNir+uaHplVabyI70FVmn7zhTrrMFzwV5ldBsVf+y3RXSXiWC6iDzsMXtyb3HP9b1g7Blre5wUVwAA=="
+      }
+    },
+    {
+      "id": "attestation-unknown-version",
+      "expect": "unchecked",
+      "now": "2026-09-22T12:00:00Z",
+      "purpose": "a verifier must refuse to guess at a version it does not know",
+      "attestation": {
+        "attestation": "9.9",
+        "id": "att-0001",
+        "kind": "declaration-check",
+        "issuer": {
+          "provenance_id": "provenance:domain:attester.example",
+          "key_fingerprint": "60cc50db92c8e95d9b4cf470734b5587944361a028e525a105ff67240df856b6"
+        },
+        "subject": {
+          "provenance_id": "provenance:github:example/research-agent",
+          "declaration_digest": "sha256:de3c902378aa25265107773458a01377d083af5a948b2d19f0cb5eba31f02ef0"
+        },
+        "issued_at": "2026-09-21T09:00:00Z",
+        "valid_until": "2026-09-24T09:00:00Z",
+        "scope": "Covers the declaration as retrieved at the stated time and location only. Not an assessment of the agent's behaviour.",
+        "status_url": "https://attester.example/.well-known/provenance/withdrawals",
+        "claims": {
+          "retrieved_from": "https://raw.githubusercontent.com/example/research-agent/HEAD/PROVENANCE.yml",
+          "retrieved_at": "2026-09-21T08:59:12Z",
+          "signature": "declaration",
+          "location": "match",
+          "key_fingerprint": "6a54646bde8ee38b578d1db85eec8f993db211d8fd98a12471ef00ec4067a21a",
+          "changes": []
+        },
+        "signature": "liKJV8clLEWdrwQgDuXSDM6Yi+pKhtSeIYjWNHlyrn5iKNBgMqqqYTnllMCRZd8KsgrfQb2Ws2WDxXr9oXN7Cw=="
+      }
+    }
+  ]
+}

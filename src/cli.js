@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 /**
- * provenance — Provenance Protocol identity CLI (the `provenance` bin of provenance-protocol)
+ * provenance — Provenance Protocol CLI (the `provenance` bin of provenance-protocol)
  *
- * Usage:
+ * Offline — no service involved:
  *   provenance keygen
+ *   provenance sign [file]
+ *   provenance verify <file | url | provenance_id> [--from <url>]
+ *   provenance validate [file]
+ *
+ * Against an index you name (--index <url> or PROVENANCE_INDEX_URL):
  *   provenance register --id <id> --url <url> [options]
  *   provenance status <id>
- *   provenance validate [file]
  *   provenance revoke --id <id> [--private-key <key>]
  */
 
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign } from 'crypto';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { createRequire } from 'module';
+import YAML from 'yaml';
+import { verifyDeclaration, locateDeclaration } from './verify.js';
+import { validateDeclaration } from './validate.js';
+import { signDeclaration } from './keygen.js';
 
-const API     = process.env.PROVENANCE_API_URL || 'https://getprovenance.dev';
 const VERSION = createRequire(import.meta.url)('../package.json').version;
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -70,6 +77,39 @@ function derivePublicKey(privateKeyBase64) {
   return Buffer.from(createPublicKey(priv).export({ type: 'spki', format: 'der' })).toString('base64');
 }
 
+// An index is one application of the standard, not part of it. Which one to
+// trust is the user's decision, so there is no default.
+function indexUrl(args) {
+  const url = args.index || process.env.PROVENANCE_INDEX_URL || process.env.PROVENANCE_API_URL;
+  if (!url || url === true) {
+    console.error(err('This command talks to an index. Name the one you use with --index <url> or PROVENANCE_INDEX_URL.'));
+    console.error(dim('Nothing was sent. keygen, sign, verify and validate need no index.'));
+    process.exit(2);
+  }
+  return String(url).replace(/\/$/, '');
+}
+
+function readDocument(file) {
+  const path = resolve(process.cwd(), file);
+  if (!existsSync(path)) { console.error(err(`File not found: ${path}`)); process.exit(2); }
+  const text = readFileSync(path, 'utf8');
+  const json = /\.json$/i.test(path);
+  try {
+    return { path, text, json, doc: json ? null : YAML.parseDocument(text), value: json ? JSON.parse(text) : parseYaml(text) };
+  } catch (e) {
+    console.error(err(`${file} could not be parsed: ${e.message}`));
+    process.exit(1);
+  }
+}
+
+// Plain JSON values only: a YAML timestamp parsed as a Date would make the
+// signature depend on how the Date is serialised, so dates stay strings.
+function parseYaml(text) {
+  const doc = YAML.parseDocument(text, { schema: 'core' });
+  if (doc.errors.length) throw new Error(doc.errors[0].message);
+  return doc.toJS();
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 async function cmdKeygen() {
@@ -89,6 +129,92 @@ async function cmdKeygen() {
   console.log(`    algorithm: ed25519\n`);
 }
 
+async function cmdSign(args) {
+  const file = args._[1] || 'PROVENANCE.yml';
+  const privateKey = args['private-key'] || process.env.PROVENANCE_PRIVATE_KEY;
+  if (!privateKey) { console.error(err('PROVENANCE_PRIVATE_KEY (or --private-key) is required to sign')); process.exit(2); }
+
+  const { path, json, doc, value } = readDocument(file);
+  if (value?.provenance !== '0.2') {
+    console.error(err(`Only spec 0.2 declarations are signed here (this one says ${JSON.stringify(value?.provenance ?? null)}).`));
+    console.error(dim('0.1 signatures do not cover capabilities or constraints. Set provenance: "0.2" and run again.'));
+    process.exit(1);
+  }
+
+  let publicKey;
+  try { publicKey = derivePublicKey(privateKey); }
+  catch { console.error(err('Private key is not a base64 PKCS8 Ed25519 key')); process.exit(2); }
+
+  const declared = value.identity?.public_key;
+  if (declared && declared !== publicKey) {
+    console.error(err('identity.public_key in the file does not belong to this private key.'));
+    console.error(dim('Refusing to sign: the result would never verify. If you are rotating keys, replace public_key first.'));
+    process.exit(1);
+  }
+
+  const identity = { ...(value.identity ?? {}), public_key: publicKey, algorithm: 'ed25519' };
+  delete identity.signature;
+  const unsigned = { ...value, identity };
+  const signature = signDeclaration(privateKey, unsigned);
+
+  if (json) {
+    writeFileSync(path, JSON.stringify({ ...unsigned, identity: { ...identity, signature } }, null, 2) + '\n');
+  } else {
+    // Edit the document in place so comments and layout survive.
+    doc.setIn(['identity', 'public_key'], publicKey);
+    doc.setIn(['identity', 'algorithm'], 'ed25519');
+    doc.setIn(['identity', 'signature'], signature);
+    writeFileSync(path, doc.toString());
+  }
+
+  // Read back what was written and verify it, so a write that went wrong
+  // cannot be reported as a success.
+  const check = await verifyDeclaration(readDocument(file).value);
+  if (!check.valid) { console.error(err(`Wrote ${file}, but it does not verify: ${check.reason}`)); process.exit(1); }
+  console.log(ok(`Signed ${file} — covers the whole declaration`));
+  console.log(`  ${dim('key fingerprint:')} ${check.fingerprint}\n`);
+}
+
+async function cmdVerify(args) {
+  const target = args._[1] || 'PROVENANCE.yml';
+  let value, retrievedFrom = typeof args.from === 'string' ? args.from : undefined;
+
+  if (/^provenance:/.test(target) || /^https?:\/\//.test(target)) {
+    const url = /^provenance:/.test(target) ? locateDeclaration(target) : target;
+    if (!url) {
+      console.error(err(`No standard location for ${target}. Pass the declaration's URL instead.`));
+      process.exit(2);
+    }
+    let text;
+    try {
+      const res = await fetch(url, { redirect: 'error' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      text = await res.text();
+    } catch (e) {
+      console.error(err(`Could not fetch ${url}: ${e.message}`));
+      console.error(dim('Nothing was verified. This is not a verification failure.'));
+      process.exit(2);
+    }
+    try { value = /\.json($|\?)/i.test(url) ? JSON.parse(text) : parseYaml(text); }
+    catch (e) { console.error(err(`${url} could not be parsed: ${e.message}`)); process.exit(1); }
+    retrievedFrom = url;
+  } else {
+    value = readDocument(target).value;
+  }
+
+  const r = await verifyDeclaration(value, { retrievedFrom });
+  console.log();
+  console.log(`${dim('Provenance id:')}  ${r.provenanceId ?? dim('none')}`);
+  console.log(`${dim('Signature:')}      ${r.valid ? c.green + 'valid' : r.signed ? c.red + 'INVALID' : c.amber + 'none'}${c.reset}`);
+  console.log(`${dim('Covers:')}         ${r.coverage === 'declaration' ? 'the whole declaration' : r.coverage === 'identity' ? c.amber + 'identity only (0.1) — constraints not protected' + c.reset : dim('—')}`);
+  console.log(`${dim('Location:')}       ${r.location === 'match' ? c.green + 'matches its id' : r.location === 'mismatch' ? c.red + 'does NOT match its id' : c.amber + (retrievedFrom ? 'could not be checked' : 'not checked (local file; pass --from <url>)')}${c.reset}`);
+  if (r.fingerprint) console.log(`${dim('Key fingerprint:')} ${r.fingerprint}`);
+  if (r.reason) console.log(`\n${dim(r.reason)}`);
+  console.log();
+
+  if (!r.valid || r.location === 'mismatch') process.exit(1);
+}
+
 async function cmdRegister(args) {
   const id          = args.id;
   const url         = args.url;
@@ -103,6 +229,7 @@ async function cmdRegister(args) {
 
   if (!id)  { console.error(err('--id required'));  process.exit(1); }
   if (!url) { console.error(err('--url required')); process.exit(1); }
+  const API = indexUrl(args);
 
   console.log(`\n${amb('Registering')} ${hi(id)}...\n`);
 
@@ -146,6 +273,7 @@ async function cmdRegister(args) {
 async function cmdStatus(args) {
   const id = args._[1];
   if (!id) { console.error(err('Usage: provenance status <provenance_id>')); process.exit(1); }
+  const API = indexUrl(args);
 
   console.log(`\n${amb('Checking')} ${hi(id)}...\n`);
 
@@ -179,44 +307,24 @@ async function cmdStatus(args) {
 
 async function cmdValidate(args) {
   const file = args._[1] || 'PROVENANCE.yml';
-  const path = resolve(process.cwd(), file);
-  if (!existsSync(path)) { console.error(err(`File not found: ${path}`)); process.exit(1); }
-
   console.log(`\n${amb('Validating')} ${hi(file)}...\n`);
-  const content = readFileSync(path, 'utf8');
+  const { value } = readDocument(file);
 
-  // "Could not check" and "checked, and it is invalid" must not look alike:
-  // this runs in CI, where a validator that cannot reach the service and
-  // reports failure would be indistinguishable from a broken declaration.
-  // Transport trouble exits 2; a genuinely invalid file exits 1.
-  let data;
-  try {
-    const res = await fetch(`${API}/api/mcp`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
-        params: { name: 'validate_provenance_yml', arguments: { content } } }),
-    });
-    if (!res.ok) throw new Error(`validation service returned HTTP ${res.status}`);
-    const rpc = await res.json();
-    const text = rpc.result?.content?.[0]?.text;
-    if (!text) throw new Error('validation service returned no result');
-    data = JSON.parse(text);
-    if (typeof data.valid !== 'boolean') throw new Error('validation service returned no verdict');
-  } catch (e) {
-    console.error(err(`Could not validate: ${e.message}`));
-    console.error(dim(`The file was not checked. This is not a validation failure.`));
-    console.log();
-    process.exit(2);
+  const result = validateDeclaration(value);
+  // A signature that is present but does not verify is a broken file, not a
+  // style note — someone edited it after signing.
+  if (value?.identity?.signature) {
+    const sig = await verifyDeclaration(value);
+    if (!sig.valid) { result.valid = false; result.errors.push(`identity.signature: ${sig.reason}`); }
   }
 
-  if (data.valid) console.log(ok('Valid PROVENANCE.yml'));
-  else { console.log(err('Validation failed')); for (const e of data.errors || []) console.log(`  ${c.red}✗${c.reset} ${e}`); }
-  for (const w of data.warnings || []) console.log(`  ${c.amber}⚠${c.reset} ${w}`);
+  if (result.valid) console.log(ok('Valid PROVENANCE.yml'));
+  else { console.log(err('Validation failed')); for (const e of result.errors) console.log(`  ${c.red}✗${c.reset} ${e}`); }
+  for (const w of result.warnings) console.log(`  ${c.amber}⚠${c.reset} ${w}`);
   console.log();
 
-  // Exit non-zero so `provenance validate` can gate a pipeline. It previously
-  // exited 0 on an invalid file, which made every CI check that used it pass.
-  if (!data.valid) process.exit(1);
+  // Non-zero on an invalid file so this can gate a pipeline.
+  if (!result.valid) process.exit(1);
 }
 
 async function cmdRevoke(args) {
@@ -224,6 +332,7 @@ async function cmdRevoke(args) {
   const privateKey = args['private-key'] || process.env.PROVENANCE_PRIVATE_KEY;
   if (!id)         { console.error(err('--id required')); process.exit(1); }
   if (!privateKey) { console.error(err('--private-key or PROVENANCE_PRIVATE_KEY required')); process.exit(1); }
+  const API = indexUrl(args);
 
   console.log(`\n${c.red}Revoking identity for${c.reset} ${hi(id)}...\n`);
 
@@ -240,11 +349,17 @@ async function cmdRevoke(args) {
 
 function cmdHelp() {
   console.log(`
-${hi('provenance')} ${dim(`v${VERSION}`)} — Provenance Protocol identity CLI
+${hi('provenance')} ${dim(`v${VERSION}`)} — Provenance Protocol CLI
 
-${amb('Commands:')}
+${amb('Offline — no service involved:')}
   ${hi('keygen')}                              Generate an Ed25519 keypair
-  ${hi('register')}  --id <id> --url <url>     Register or update your agent
+  ${hi('sign')}      [file]                     Sign a 0.2 declaration in place (default: ./PROVENANCE.yml)
+  ${hi('verify')}    <file | url | id>          Verify a declaration's signature and location
+               [--from <url>]            where a local file was published
+  ${hi('validate')}  [file]                     Check a declaration against the schema
+
+${amb('Against an index you choose')} ${dim('(--index <url> or PROVENANCE_INDEX_URL):')}
+  ${hi('register')}  --id <id> --url <url>     Register or update your agent in that index
                [--name <name>]
                [--description <text>]
                [--capabilities read:web,write:code]
@@ -252,24 +367,24 @@ ${amb('Commands:')}
                [--model anthropic] [--model-id claude-sonnet-4-6]
                [--ajp-endpoint <url>]
                [--private-key <key>]
-  ${hi('status')}    <provenance_id>            Check trust score and checklist
-  ${hi('validate')}  [file]                     Validate PROVENANCE.yml (default: ./PROVENANCE.yml)
-  ${hi('revoke')}    --id <id>                  Revoke cryptographic identity
+  ${hi('status')}    <provenance_id>            What that index says about an agent
+  ${hi('revoke')}    --id <id>                  Tell that index your key is revoked
                [--private-key <key>]
 
+${amb('Exit codes:')}
+  0 ok   1 checked and failed   2 could not check (nothing was verified)
+
 ${amb('Environment variables:')}
-  PROVENANCE_ID           Your agent's Provenance ID
   PROVENANCE_PRIVATE_KEY  Your Ed25519 private key (base64 PKCS8 DER)
-  PROVENANCE_API_URL      Override API base (default: https://getprovenance.dev)
+  PROVENANCE_INDEX_URL    Index for register, status and revoke
 
 ${amb('For AJP job delegation:')}
-  ${dim('npm install -g ajp-cli')}
-  ${dim('npx ajp hire <id> --instruction "..."')}
+  ${dim('npx @ilucky21c/ajp-cli hire <id> --instruction "..."')}
 
 ${amb('Examples:')}
   provenance keygen
-  provenance register --id provenance:github:alice/my-agent --url https://github.com/alice/my-agent
-  provenance status provenance:github:alice/my-agent
+  provenance sign
+  provenance verify provenance:domain:agent.example.com
   provenance validate
 `);
 }
@@ -283,6 +398,8 @@ const cmd  = args._[0];
 try {
   if (!cmd || cmd === 'help' || args.help) cmdHelp();
   else if (cmd === 'keygen')   await cmdKeygen();
+  else if (cmd === 'sign')     await cmdSign(args);
+  else if (cmd === 'verify')   await cmdVerify(args);
   else if (cmd === 'register') await cmdRegister(args);
   else if (cmd === 'status')   await cmdStatus(args);
   else if (cmd === 'validate') await cmdValidate(args);

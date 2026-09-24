@@ -106,3 +106,77 @@ export function verifyAgentChallenge(
 export function verifyAgentRevocation(
   publicKeyBase64: string, provenanceId: string, signatureBase64: string
 ): Promise<boolean>;
+
+/**
+ * Where a declaration is published, derived from its provenance id alone:
+ * domain ids → https://<host>[/<path>]/.well-known/provenance.json,
+ * github ids → PROVENANCE.yml on the default branch. null where the platform
+ * has no single fetchable location.
+ */
+export function locateDeclaration(provenanceId: string): string | null;
+
+/**
+ * SHA-256 of a declaration's signing payload, as `sha256:<hex>`. Unchanged by
+ * formatting, comments, key order or signature; changed by any field.
+ */
+export function declarationDigest(declaration: object): Promise<string>;
+
+export interface CheckDeclarationOptions {
+  retrievedFrom?: string;
+  /** Default true. */
+  requireSignature?: boolean;
+  /** Default true: must be served from the location its id names. */
+  requireLocation?: boolean;
+  /** Default 'declaration': refuses 0.1 signatures, which do not protect constraints. */
+  requireCoverage?: SignatureCoverage;
+  requireConstraints?: string[];
+  requireCapabilities?: string[];
+  /** Key fingerprint seen before; a different one is refused as a rotation. */
+  expectedFingerprint?: string;
+}
+
+export interface CheckDeclarationResult {
+  allowed: boolean;
+  reason: string | null;
+  verification: VerificationResult;
+}
+
+/**
+ * Accept or refuse an agent on the strength of its declaration alone, offline.
+ * Answers "is this genuinely the operator's, and does it promise what I
+ * require?" — not current standing, which comes from attesters you choose.
+ */
+export function checkDeclaration(
+  declaration: unknown,
+  options?: CheckDeclarationOptions
+): Promise<CheckDeclarationResult>;
+
+export type AttestationStatus = 'valid' | 'expired' | 'not_yet_valid' | 'invalid' | 'unchecked';
+
+export interface AttestationVerification {
+  /**
+   * 'expired' is genuine but stale; 'invalid' is forged or malformed;
+   * 'unchecked' means it could not be checked at all. Never treat them alike.
+   */
+  status: AttestationStatus;
+  valid: boolean;
+  reason: string | null;
+  kind: string | null;
+  issuer: string | null;
+  subject: { provenance_id?: string; url?: string; declaration_digest?: string } | null;
+  validUntil: string | null;
+}
+
+/**
+ * Verify an attestation offline against the issuer's public key, which the
+ * caller supplies (normally from the issuer's own verified declaration).
+ */
+export function verifyAttestation(
+  attestation: unknown,
+  options: { issuerPublicKey: string; now?: Date | number }
+): Promise<AttestationVerification>;
+
+/** Verify an issuer's withdrawal of one of its attestations. */
+export function verifyAttestationWithdrawal(
+  issuerPublicKey: string, issuerId: string, attestationId: string, signatureBase64: string
+): Promise<boolean>;

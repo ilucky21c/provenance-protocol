@@ -1,6 +1,6 @@
 # Test vectors
 
-Normative test data for Provenance Protocol v0.1. An implementation that
+Normative test data for the Provenance Protocol. An implementation that
 reproduces these results interoperates with every other implementation that
 does, without reference to any service.
 
@@ -23,7 +23,25 @@ The four negative vectors are the cases that matter in practice: a signature
 from the wrong key, an altered `provenance_id`, a substituted public key
 (the re-hosting attack), and a malformed signature.
 
-The private key in this file is test data. Never use it for anything.
+The private keys in these files are test data. Never use them for anything.
+
+## declarations-0.2.json
+
+Whole-declaration signatures (spec 0.2): the signed payload is
+`provenance-declaration-v1:` followed by the canonical JSON of the parsed
+declaration without `identity.signature`.
+
+## attestations-0.1.json
+
+Attestations (format 0.1). Verify each vector with the issuer public key in the
+file, at the vector's `now`, and compare the **status** — `valid`, `expired`,
+`not_yet_valid`, `invalid` or `unchecked` — not just pass/fail. The vectors
+that matter most are `attestation-forged-and-expired` (a forgery must read as
+`invalid`, never as `expired`) and `attestation-window-extended` (pushing
+`valid_until` out after signing must break the signature).
+
+Also included: the `declaration_digest` of a 0.2 declaration, and a withdrawal
+signature with its payload.
 
 ## Running them
 

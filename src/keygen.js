@@ -5,7 +5,10 @@
  *   1. Generate an Ed25519 keypair once (setup)
  *   2. Put the public key in PROVENANCE.yml under identity.public_key
  *   3. Keep the private key in their environment (never committed, never shared)
- *   4. Sign challenges from receiving systems at runtime
+ *   4. Sign their declaration, and challenges from receiving systems at runtime
+ *
+ * Attesters (anyone issuing statements about other agents) use it to sign
+ * attestations and withdrawals.
  *
  * Usage (one-time setup):
  *   import { generateProvenanceKeyPair } from 'provenance-protocol/keygen';
@@ -15,17 +18,22 @@
  *   //     public_key: "<publicKey>"
  *   // Store privateKey as an environment variable: PROVENANCE_PRIVATE_KEY=<privateKey>
  *
- * Usage (runtime — signing challenges):
- *   import { signChallenge } from 'provenance-protocol/keygen';
- *   const signature = signChallenge(process.env.PROVENANCE_PRIVATE_KEY, provenanceId, nonce);
- *   // Return signature to the receiving system
+ * Usage (runtime — proving key control to a caller):
+ *   import { signAgentChallenge } from 'provenance-protocol/keygen';
+ *   const signature = signAgentChallenge(process.env.PROVENANCE_PRIVATE_KEY, provenanceId, nonce);
  *
  * Note: This module uses Node.js built-in crypto. It is Node-only (not browser).
- * The verification side (in index.js) uses Web Crypto and works everywhere.
+ * The verification side (verify.js) uses Web Crypto and works everywhere.
  */
 
 import { generateKeyPairSync, sign, createPrivateKey } from 'crypto';
-import { declarationSigningPayload, challengePayload, revocationPayload } from './canonical.js';
+import {
+  declarationSigningPayload,
+  challengePayload,
+  revocationPayload,
+  attestationSigningPayload,
+  attestationWithdrawalPayload,
+} from './canonical.js';
 
 /**
  * Generate a new Ed25519 keypair for use with Provenance identity.
@@ -93,67 +101,21 @@ export function signChallenge(privateKeyBase64, provenanceId, nonce) {
 }
 
 /**
- * Sign your PROVENANCE.yml identity claim.
+ * Sign a revocation request — LEGACY, spec 0.1 payload "<provenanceId>:REVOKE".
  *
- * Call this once after generating your keypair to produce the `identity.signature`
- * value that goes into PROVENANCE.yml. The signature proves you control the private
- * key that matches the public key in the file.
- *
- * The signed message is `${provenanceId}:${publicKeyBase64}` — this binds the key
- * pair to your specific Provenance ID, preventing key reuse across identities.
- *
- * @param {string} privateKeyBase64  Your PROVENANCE_PRIVATE_KEY (base64 PKCS8 DER)
- * @param {string} provenanceId     Your agent's Provenance ID, e.g. "provenance:github:alice/agent"
- * @param {string} publicKeyBase64  The public key you're registering (base64 SPKI DER)
- * @returns {string}                Base64-encoded signature — put this in identity.signature
- *
- * Example (one-time setup):
- *   import { generateProvenanceKeyPair, signForProvenance } from 'provenance-protocol/keygen';
- *   const { publicKey, privateKey } = generateProvenanceKeyPair();
- *   const id = 'provenance:github:your-org/your-agent';
- *   const signature = signForProvenance(privateKey, id, publicKey);
- *   console.log('Add to PROVENANCE.yml:');
- *   console.log('identity:');
- *   console.log(`  public_key: "${publicKey}"`);
- *   console.log(`  signature: "${signature}"`);
- */
-/**
- * Sign a revocation request.
- *
- * Call this when you want to revoke your agent's cryptographic identity —
- * e.g. if your private key was compromised or you're rotating keys.
+ * Kept for services that still accept it. Prefer `signAgentRevocation`: the
+ * legacy form is the same shape as a legacy challenge, so any endpoint signing
+ * challenges in that form also hands out revocations.
  *
  * @param {string} privateKeyBase64  Your current PROVENANCE_PRIVATE_KEY
  * @param {string} provenanceId     Your agent's Provenance ID
- * @returns {string}                Base64 signature — send as signed_challenge to POST /api/agents/revoke
- *
- * Example:
- *   import { signRevocation } from 'provenance-protocol/keygen';
- *   const signed_challenge = signRevocation(process.env.PROVENANCE_PRIVATE_KEY, provenanceId);
- *   await fetch('https://getprovenance.dev/api/agents/revoke', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({ provenance_id: provenanceId, signed_challenge }),
- *   });
+ * @returns {string}                Base64 signature, for whichever registry or
+ *                                  attester you publish revocations to
  */
 export function signRevocation(privateKeyBase64, provenanceId) {
   return signChallenge(privateKeyBase64, provenanceId, 'REVOKE');
 }
 
-/**
- * Sign a whole declaration — spec 0.2.
- *
- * Covers every field, so deleting a constraint or adding a capability breaks
- * the signature. `signForProvenance` (spec 0.1) covers only the identity and
- * key, which leaves the rest of the declaration unprotected; prefer this.
- *
- * Signs the canonical form of the PARSED declaration, so reformatting the file
- * does not invalidate the signature.
- *
- * @param {string} privateKeyBase64  Base64 PKCS8 DER private key
- * @param {object} declaration       Parsed declaration; identity.signature is ignored
- * @returns {string}                 Base64 signature — put it in identity.signature
- */
 function _sign(privateKeyBase64, message) {
   const privateKey = createPrivateKey({
     key: Buffer.from(privateKeyBase64, 'base64'),
@@ -195,6 +157,20 @@ export function signAgentRevocation(privateKeyBase64, provenanceId) {
   return _sign(privateKeyBase64, revocationPayload(provenanceId));
 }
 
+/**
+ * Sign a whole declaration — spec 0.2.
+ *
+ * Covers every field, so deleting a constraint or adding a capability breaks
+ * the signature. `signForProvenance` (spec 0.1) covers only the identity and
+ * key, which leaves the rest of the declaration unprotected; prefer this.
+ *
+ * Signs the canonical form of the PARSED declaration, so reformatting the file
+ * does not invalidate the signature.
+ *
+ * @param {string} privateKeyBase64  Base64 PKCS8 DER private key
+ * @param {object} declaration       Parsed declaration; identity.signature is ignored
+ * @returns {string}                 Base64 signature — put it in identity.signature
+ */
 export function signDeclaration(privateKeyBase64, declaration) {
   const keyBuffer = Buffer.from(privateKeyBase64, 'base64');
   const privateKey = createPrivateKey({ key: keyBuffer, format: 'der', type: 'pkcs8' });
@@ -202,9 +178,65 @@ export function signDeclaration(privateKeyBase64, declaration) {
   return sign(null, message, privateKey).toString('base64');
 }
 
+/**
+ * Sign your PROVENANCE.yml identity claim — LEGACY, spec 0.1.
+ *
+ * Covers only the identity and key, not the rest of the declaration. Use
+ * `signDeclaration` for new declarations.
+ *
+ * Call this once after generating your keypair to produce the `identity.signature`
+ * value that goes into PROVENANCE.yml. The signature proves you control the private
+ * key that matches the public key in the file.
+ *
+ * The signed message is `${provenanceId}:${publicKeyBase64}` — this binds the key
+ * pair to your specific Provenance ID, preventing key reuse across identities.
+ *
+ * @param {string} privateKeyBase64  Your PROVENANCE_PRIVATE_KEY (base64 PKCS8 DER)
+ * @param {string} provenanceId     Your agent's Provenance ID, e.g. "provenance:github:alice/agent"
+ * @param {string} publicKeyBase64  The public key you're registering (base64 SPKI DER)
+ * @returns {string}                Base64-encoded signature — put this in identity.signature
+ *
+ * Example (one-time setup):
+ *   import { generateProvenanceKeyPair, signForProvenance } from 'provenance-protocol/keygen';
+ *   const { publicKey, privateKey } = generateProvenanceKeyPair();
+ *   const id = 'provenance:github:your-org/your-agent';
+ *   const signature = signForProvenance(privateKey, id, publicKey);
+ *   console.log('Add to PROVENANCE.yml:');
+ *   console.log('identity:');
+ *   console.log(`  public_key: "${publicKey}"`);
+ *   console.log(`  signature: "${signature}"`);
+ */
 export function signForProvenance(privateKeyBase64, provenanceId, publicKeyBase64) {
   const keyBuffer = Buffer.from(privateKeyBase64, 'base64');
   const privateKey = createPrivateKey({ key: keyBuffer, format: 'der', type: 'pkcs8' });
   const message = Buffer.from(`${provenanceId}:${publicKeyBase64}`, 'utf8');
   return sign(null, message, privateKey).toString('base64');
+}
+
+/**
+ * Sign an attestation — a statement you, as issuer, make about another agent.
+ *
+ * Covers every field except `signature`. Set `issuer.key_fingerprint` to the
+ * fingerprint of the key you sign with (`keyFingerprint` in ./verify.js), or
+ * no verifier will accept it.
+ *
+ * @param {string} privateKeyBase64  Issuer's base64 PKCS8 DER private key
+ * @param {object} attestation       Attestation; any existing signature is ignored
+ * @returns {string}                 Base64 signature — put it in `signature`
+ */
+export function signAttestation(privateKeyBase64, attestation) {
+  return _sign(privateKeyBase64, attestationSigningPayload(attestation));
+}
+
+/**
+ * Withdraw an attestation you issued, before its validity window ends.
+ * Publish the result at the attestation's `status_url`.
+ *
+ * @param {string} privateKeyBase64
+ * @param {string} issuerId        Your provenance id, as in issuer.provenance_id
+ * @param {string} attestationId   The attestation's id
+ * @returns {string}               Base64 signature
+ */
+export function signAttestationWithdrawal(privateKeyBase64, issuerId, attestationId) {
+  return _sign(privateKeyBase64, attestationWithdrawalPayload(issuerId, attestationId));
 }
