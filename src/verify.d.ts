@@ -139,6 +139,8 @@ export interface CheckDeclarationResult {
   allowed: boolean;
   reason: string | null;
   verification: VerificationResult;
+  /** What tied the declaration to its operator, when allowed. */
+  anchor: 'location' | 'affiliation' | null;
 }
 
 /**
@@ -206,3 +208,14 @@ export function checkInteropLinks(declaration: object): {
   a2a: 'confirmed' | 'claimed' | 'none';
   mcp: 'confirmed' | 'claimed' | 'none';
 };
+
+/**
+ * Open a declaration delivered inside a declaration-published notice (internal
+ * or private services). Proves the notice and declaration belong together;
+ * pair with an affiliation in checkDeclaration to prove who operates it.
+ */
+export function openDeliveredDeclaration(notice: unknown): Promise<{
+  valid: boolean;
+  reason: string | null;
+  declaration: object | null;
+}>;

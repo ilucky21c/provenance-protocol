@@ -7,6 +7,7 @@
  *   provenance sign [file]
  *   provenance verify <file | url | provenance_id> [--from <url>]
  *   provenance validate [file]
+ *   provenance affiliate <declaration> --org <org_provenance_id> [--unit <name>]
  *
  * Against an index you name (--index <url> or PROVENANCE_INDEX_URL):
  *   provenance register --id <id> --url <url> [options]
@@ -19,9 +20,9 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { createRequire } from 'module';
 import YAML from 'yaml';
-import { verifyDeclaration, locateDeclaration } from './verify.js';
+import { verifyDeclaration, locateDeclaration, keyFingerprint } from './verify.js';
 import { validateDeclaration } from './validate.js';
-import { signDeclaration } from './keygen.js';
+import { signDeclaration, signAttestation } from './keygen.js';
 
 const VERSION = createRequire(import.meta.url)('../package.json').version;
 
@@ -215,6 +216,59 @@ async function cmdVerify(args) {
   if (!r.valid || r.location === 'mismatch') process.exit(1);
 }
 
+// An organisation vouching for one of its own agents: "we operate this
+// agent, with this key". For internal services nobody outside can reach,
+// this stands in for the location check. Signed with the organisation's key,
+// never the agent's.
+async function cmdAffiliate(args) {
+  const file = args._[1];
+  const org = typeof args.org === 'string' ? args.org : process.env.PROVENANCE_ORG_ID;
+  const orgKey = args['org-private-key'] || process.env.PROVENANCE_ORG_PRIVATE_KEY;
+  const days = Number(args['valid-days'] ?? 365);
+  if (!file) { console.error(err('Usage: provenance affiliate <declaration> --org <org_provenance_id> [--unit <name>]')); process.exit(1); }
+  if (!org) { console.error(err('--org (or PROVENANCE_ORG_ID) is required: the organisation\'s own provenance id')); process.exit(2); }
+  if (!orgKey) { console.error(err('PROVENANCE_ORG_PRIVATE_KEY (or --org-private-key) is required — the organisation\'s key, not the agent\'s')); process.exit(2); }
+  if (!Number.isFinite(days) || days <= 0 || days > 3650) { console.error(err('--valid-days must be between 1 and 3650')); process.exit(1); }
+
+  const { value } = readDocument(file);
+  const v = await verifyDeclaration(value);
+  if (!v.valid || v.coverage !== 'declaration') {
+    console.error(err(`Refusing to vouch for a declaration that does not verify in full: ${v.reason ?? 'spec 0.1 signature'}`));
+    process.exit(1);
+  }
+
+  let orgPublic;
+  try { orgPublic = derivePublicKey(orgKey); }
+  catch { console.error(err('Organisation key is not a base64 PKCS8 Ed25519 key')); process.exit(2); }
+
+  const now = new Date();
+  const stamp = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const attestation = {
+    attestation: '0.1',
+    id: `affiliation-${v.fingerprint.slice(0, 16)}-${now.getTime().toString(36)}`,
+    kind: 'affiliation',
+    issuer: { provenance_id: org, key_fingerprint: await keyFingerprint(orgPublic) },
+    subject: { provenance_id: v.provenanceId },
+    issued_at: stamp(now),
+    valid_until: stamp(new Date(now.getTime() + days * 86400000)),
+    scope: `${org} operates this agent with the key named here. Not an assessment of its behaviour.`,
+    claims: {
+      relationship: 'operated_by',
+      ...(typeof args.unit === 'string' ? { unit: args.unit } : {}),
+      subject_key_fingerprint: v.fingerprint,
+    },
+  };
+  attestation.signature = signAttestation(orgKey, attestation);
+
+  const out = JSON.stringify(attestation, null, 2) + '\n';
+  if (typeof args.out === 'string') {
+    writeFileSync(resolve(process.cwd(), args.out), out);
+    console.log(ok(`Affiliation for ${v.provenanceId} written to ${args.out} (valid ${days} days)`));
+  } else {
+    process.stdout.write(out);
+  }
+}
+
 async function cmdRegister(args) {
   const id          = args.id;
   const url         = args.url;
@@ -357,6 +411,8 @@ ${amb('Offline — no service involved:')}
   ${hi('verify')}    <file | url | id>          Verify a declaration's signature and location
                [--from <url>]            where a local file was published
   ${hi('validate')}  [file]                     Check a declaration against the schema
+  ${hi('affiliate')} <declaration>              Vouch, as an organisation, for an agent you operate
+               --org <org_provenance_id> [--unit <name>] [--valid-days 365] [--out file]
 
 ${amb('Against an index you choose')} ${dim('(--index <url> or PROVENANCE_INDEX_URL):')}
   ${hi('register')}  --id <id> --url <url>     Register or update your agent in that index
@@ -376,6 +432,7 @@ ${amb('Exit codes:')}
 
 ${amb('Environment variables:')}
   PROVENANCE_PRIVATE_KEY  Your Ed25519 private key (base64 PKCS8 DER)
+  PROVENANCE_ORG_PRIVATE_KEY  Your organisation's key, for affiliate
   PROVENANCE_INDEX_URL    Index for register, status and revoke
 
 ${amb('For AJP job delegation:')}
@@ -400,6 +457,7 @@ try {
   else if (cmd === 'keygen')   await cmdKeygen();
   else if (cmd === 'sign')     await cmdSign(args);
   else if (cmd === 'verify')   await cmdVerify(args);
+  else if (cmd === 'affiliate') await cmdAffiliate(args);
   else if (cmd === 'register') await cmdRegister(args);
   else if (cmd === 'status')   await cmdStatus(args);
   else if (cmd === 'validate') await cmdValidate(args);

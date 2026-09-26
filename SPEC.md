@@ -701,6 +701,12 @@ identity but does not publish it), `reported_at`, `category`, `relates_to`
 vocabulary), `summary`, `state` (`received` / `responded` / `disputed` /
 `withdrawn` / `resolved`) and the subject's `response`.
 
+**`affiliation`** — an organisation states that it operates the subject agent,
+with a specific key: `relationship` (`operated_by`), `unit` (the department or
+team, optional) and `subject_key_fingerprint`. Requires
+`subject.provenance_id`. It covers that key only; a new key needs a new
+affiliation. See [Private and internal agents](#private-and-internal-agents).
+
 **`decision`** — someone approved the subject for a use, or withdrew that
 approval: `outcome` (`approved` / `withdrawn`), `use`, `decided_at`,
 `decided_by`. Requires `subject.declaration_digest`, so the decision is pinned
@@ -785,7 +791,7 @@ is `schema/notice-0.1.json`.
 
 | Event | Claims | Sent when |
 |---|---|---|
-| `declaration-published` | `declaration_url`, `declaration_digest`, `running_version` | the service starts, or the declaration changes |
+| `declaration-published` | `declaration_url`, `declaration_digest`, `running_version`, and optionally the full `declaration` | the service starts, or the declaration changes |
 | `release` | `version`, `commit`, `declaration_digest` | CI ships a release — ties promises to a build |
 | `key-rotation` | `new_public_key`, `reason` | the operator replaces its key |
 | `incident` | `severity`, `summary`, `started_at`, `resolved_at`, `relates_to` | the operator discloses its own incident |
@@ -813,6 +819,39 @@ none.
 
 A notice is the operator's own statement. It is evidence of what they said and
 when, like a declaration — not proof that it is true.
+
+---
+
+## Private and internal agents
+
+Many agents are never exposed to the internet: a company's own assistants in
+HR, finance or support, running on internal hosts. They use the same
+declarations, notices and attestations, with two differences.
+
+**Delivery instead of fetching.** A watcher outside the network cannot fetch
+the declaration, so the agent delivers it: a `declaration-published` notice
+carrying the full signed `declaration` in its claims, sent to watchers the
+operator chooses. A receiver MUST check that the declaration verifies in full
+(spec 0.2), that its digest equals `declaration_digest`, and that the notice is
+signed by the declaration's own key. That proves the notice and the declaration
+belong together. It does not prove who operates the agent. The watcher never
+needs access to the network, credentials, or the agent's key.
+
+**Affiliation instead of location.** An internal hostname proves nothing to an
+outsider, so the location check cannot tie the declaration to its operator.
+Instead the operating organisation signs an `affiliation` attestation with its
+own key: this agent id, with this key, is operated by us (and, optionally, by
+this unit). The organisation's key is published in its own declaration at its
+public domain — `provenance:domain:corp.example` — and verified like any other.
+
+A verifier MAY accept an affiliation in place of the location check when it is
+valid, of kind `affiliation`, names the declaration's `provenance_id`, and its
+`subject_key_fingerprint` equals the declaration's key. Nothing else stands in
+for location. There is still no central authority: each organisation vouches
+only for its own agents.
+
+Internal declarations and attestations need not be published anywhere. They are
+shared with whoever the organisation chooses.
 
 ---
 
@@ -915,8 +954,10 @@ An implementation of this specification is conformant if it:
 9. For notices: refuses unknown `notice` versions, accepts a key rotation only
    when signed by the previous key, and reproduces every outcome in
    `test-vectors/notices-0.1.json`.
+10. Accepts an affiliation in place of the location check only when it binds
+    the declaration's exact `provenance_id` and key fingerprint.
 
-Points 6 to 9 are what make independent implementations agree. An
+Points 6 to 10 are what make independent implementations agree. An
 implementation that passes the test vectors interoperates with every other
 one that does, with no reference to any particular service.
 

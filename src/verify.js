@@ -467,7 +467,11 @@ export async function declarationDigest(declaration) {
  * @param {string[]} [options.requireConstraints=[]]
  * @param {string[]} [options.requireCapabilities=[]]
  * @param {string}   [options.expectedFingerprint]  Key seen before; a different one is a rotation
- * @returns {Promise<{ allowed: boolean, reason: string | null, verification: object }>}
+ * @param {object}   [options.affiliation]  For agents whose location cannot be checked publicly
+ *        (internal or private services): { attestation, issuerPublicKey, now? } — an
+ *        `affiliation` attestation signed by the organisation that operates the agent. When
+ *        valid and bound to this agent's id and key, it stands in for the location check.
+ * @returns {Promise<{ allowed: boolean, reason: string | null, verification: object, anchor: 'location'|'affiliation'|null }>}
  */
 export async function checkDeclaration(declaration, options = {}) {
   const {
@@ -481,7 +485,7 @@ export async function checkDeclaration(declaration, options = {}) {
   } = options;
 
   const verification = await verifyDeclaration(declaration, { retrievedFrom });
-  const refuse = (reason) => ({ allowed: false, reason, verification });
+  const refuse = (reason) => ({ allowed: false, reason, verification, anchor: null });
 
   if (requireSignature) {
     if (!verification.valid) return refuse(verification.reason ?? 'Signature did not verify');
@@ -490,7 +494,17 @@ export async function checkDeclaration(declaration, options = {}) {
     }
   }
 
-  if (requireLocation && verification.location !== 'match') {
+  // What ties the declaration to its operator: where it was published, or —
+  // for a service nobody outside can reach — the operator's organisation
+  // vouching for this exact id and key.
+  let anchor = verification.location === 'match' ? 'location' : null;
+  if (!anchor && options.affiliation) {
+    const why = await checkAffiliation(options.affiliation, verification);
+    if (why) return refuse(why);
+    anchor = 'affiliation';
+  }
+
+  if (requireLocation && !anchor) {
     return refuse(
       !retrievedFrom
         ? 'Retrieval location not given, so the declaration cannot be tied to its operator'
@@ -513,7 +527,21 @@ export async function checkDeclaration(declaration, options = {}) {
     if (!capabilities.includes(c)) return refuse(`Agent does not declare capability: ${c}`);
   }
 
-  return { allowed: true, reason: null, verification };
+  return { allowed: true, reason: null, verification, anchor };
+}
+
+async function checkAffiliation({ attestation, issuerPublicKey, now } = {}, verification) {
+  const r = await verifyAttestation(attestation, { issuerPublicKey, now });
+  if (!r.valid) return `Affiliation ${r.status}: ${r.reason}`;
+  if (r.kind !== 'affiliation') return `Attestation is a ${r.kind}, not an affiliation`;
+  if (r.subject?.provenance_id !== verification.provenanceId) {
+    return 'Affiliation is for a different agent';
+  }
+  if (!verification.valid) return 'An affiliation covers a signed declaration only';
+  if (attestation.claims?.subject_key_fingerprint !== verification.fingerprint) {
+    return 'Affiliation vouches for a different key than this declaration uses';
+  }
+  return null;
 }
 
 /** Attestation format versions this verifier understands. */
@@ -794,4 +822,42 @@ export function checkInteropLinks(declaration) {
   }
 
   return { a2a, mcp };
+}
+
+/**
+ * Open a declaration delivered inside a notice — how an internal or private
+ * service, which no watcher can fetch, hands over its declaration.
+ *
+ * Checks, offline, that the declaration inside verifies, that its digest is
+ * the one the notice names, and that the notice was signed by the same key.
+ * That proves the notice and declaration belong together. It does NOT prove
+ * who operates the agent: nobody outside can check an internal location, so
+ * pass the returned declaration to `checkDeclaration` with an `affiliation`
+ * from the operating organisation.
+ *
+ * @param {object} notice  A declaration-published notice carrying claims.declaration
+ * @returns {Promise<{ valid: boolean, reason: string | null, declaration: object | null }>}
+ */
+export async function openDeliveredDeclaration(notice) {
+  const fail = (reason) => ({ valid: false, reason, declaration: null });
+  if (notice?.event !== 'declaration-published') return fail('Not a declaration-published notice');
+  const declaration = notice?.claims?.declaration;
+  if (!declaration || typeof declaration !== 'object') return fail('Notice does not carry a declaration');
+
+  const v = await verifyDeclaration(declaration);
+  if (!v.valid) return fail(`Delivered declaration did not verify: ${v.reason}`);
+  if (v.coverage !== 'declaration') return fail('Delivered declaration must be spec 0.2, signed in full');
+  if (v.provenanceId !== notice.provenance_id) return fail('Notice and declaration name different agents');
+
+  let digest;
+  try {
+    digest = await declarationDigest(declaration);
+  } catch (e) {
+    return fail(`Delivered declaration cannot be digested: ${e.message}`);
+  }
+  if (digest !== notice.claims.declaration_digest) return fail('Delivered declaration does not match the digest the notice names');
+
+  const n = await verifyNotice(notice, { publicKey: v.publicKey });
+  if (!n.valid) return fail(`Notice ${n.status}: ${n.reason}`);
+  return { valid: true, reason: null, declaration };
 }

@@ -87,6 +87,10 @@
               "running_version": {
                 "type": "string",
                 "maxLength": 100
+              },
+              "declaration": {
+                "type": "object",
+                "description": "The full signed declaration, for agents whose declaration cannot be fetched by the watcher \u2014 internal or private services. Its digest must equal declaration_digest."
               }
             },
             "additionalProperties": false

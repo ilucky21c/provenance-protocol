@@ -153,6 +153,27 @@ entry. A link is *confirmed* only when the same party provably controls both
 ends; otherwise it is *claimed*, so nobody can attach their declaration to a
 well-known agent.
 
+## Internal agents
+
+A company's own agents, on hosts nobody outside can reach, deliver their
+declaration inside a signed notice, and the company vouches for them with an
+`affiliation` signed by its own key:
+
+```bash
+PROVENANCE_ORG_PRIVATE_KEY=… npx provenance-protocol affiliate PROVENANCE.yml \
+  --org provenance:domain:corp.example --unit "Human Resources" --out affiliation.json
+```
+
+```js
+import { openDeliveredDeclaration, checkDeclaration } from 'provenance-protocol';
+
+const { declaration } = await openDeliveredDeclaration(notice);
+const r = await checkDeclaration(declaration, {
+  affiliation: { attestation: affiliation, issuerPublicKey: orgPublicKey },
+});
+r.anchor   // 'affiliation' — tied to the organisation, not to a location
+```
+
 ## Sign your own declaration
 
 From the command line — no service involved:
