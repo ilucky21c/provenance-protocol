@@ -188,7 +188,7 @@ async function cmdInit(args) {
   }
   console.log(`  ${dim('·')} or serve it from your service: ${hi("app.use(provenance({ declaration: './PROVENANCE.yml' }))")} ${dim('(npm i provenance-middleware)')}`);
   console.log(`\n${amb('Keep it honest on every build')} ${dim('(.github/workflows/provenance.yml):')}`);
-  console.log(dim('  - uses: ilucky21c/provenance-action@v1'));
+  console.log(dim('  - uses: provenance-protocol/provenance-action@v1'));
   console.log();
 }
 

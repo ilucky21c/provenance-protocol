@@ -74,7 +74,7 @@ Three lines. That is the minimum. Everything else is optional but valuable.
 ```yaml
 # PROVENANCE.yml
 # Provenance Protocol 0.2
-# https://github.com/ilucky21c/provenance-protocol/blob/main/SPEC.md
+# https://github.com/provenance-protocol/provenance-protocol/blob/main/SPEC.md
 
 provenance: "0.2"
 
@@ -1034,4 +1034,4 @@ particular issuer is a decision the standard deliberately leaves to the reader.
 ---
 
 *Provenance Protocol — MIT License*
-*https://github.com/ilucky21c/provenance-protocol*
+*https://github.com/provenance-protocol/provenance-protocol*

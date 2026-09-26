@@ -57,9 +57,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ilucky21c/provenance-protocol"
+    "url": "https://github.com/provenance-protocol/provenance-protocol"
   },
-  "homepage": "https://github.com/ilucky21c/provenance-protocol#readme",
+  "homepage": "https://github.com/provenance-protocol/provenance-protocol#readme",
   "engines": {
     "node": ">=18"
   },

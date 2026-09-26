@@ -138,7 +138,7 @@ r.newKeyFingerprint // after a valid key-rotation, pin this
 Events: `declaration-published`, `release`, `key-rotation` (signed by the old
 key, so a new key arrives vouched for), `incident`. Operators sign them with
 `signNotice` from `provenance-protocol/keygen`;
-[`provenance-middleware`](https://github.com/ilucky21c/provenance-middleware)
+[`provenance-middleware`](https://github.com/provenance-protocol/provenance-middleware)
 publishes them for you.
 
 ## Links to A2A and MCP
@@ -200,7 +200,7 @@ npx provenance-protocol validate
 
 `sign` edits the file in place, keeps your comments, and reads the result back
 to confirm it verifies. For a hosted service,
-[`provenance-middleware`](https://github.com/ilucky21c/provenance-middleware)
+[`provenance-middleware`](https://github.com/provenance-protocol/provenance-middleware)
 serves and signs the declaration at startup instead.
 
 Or in code:
@@ -270,8 +270,8 @@ The CLI's `register`, `status` and `revoke` commands likewise need
 
 | Package | Purpose |
 |---|---|
-| [`provenance-middleware`](https://github.com/ilucky21c/provenance-middleware) | One line that makes a service serve and sign its own declaration |
-| [`provenance-action`](https://github.com/ilucky21c/provenance-action) | Verify a declaration in CI |
-| [`ajp-protocol`](https://github.com/ilucky21c/ajp-protocol) | Agent Job Protocol — agent-to-agent job delegation |
+| [`provenance-middleware`](https://github.com/provenance-protocol/provenance-middleware) | One line that makes a service serve and sign its own declaration |
+| [`provenance-action`](https://github.com/provenance-protocol/provenance-action) | Verify a declaration in CI |
+| [`ajp-protocol`](https://github.com/provenance-protocol/ajp-protocol) | Agent Job Protocol — agent-to-agent job delegation |
 
 ## MIT License
