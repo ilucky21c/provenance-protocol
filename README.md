@@ -174,6 +174,19 @@ const r = await checkDeclaration(declaration, {
 r.anchor   // 'affiliation' — tied to the organisation, not to a location
 ```
 
+## Your first declaration, in about five minutes
+
+```bash
+npx provenance-protocol init
+```
+
+It reads your project on your machine — name, version, repository, which AI
+provider you use, which libraries imply which capabilities, which MCP servers you
+connect to — suggests the promises your code supports, asks two policy questions,
+creates a key kept out of git, and signs. Nothing leaves your machine. With
+`--yes` it fills in only what your project shows and makes no promises for you:
+a promise has to be a decision.
+
 ## Sign your own declaration
 
 From the command line — no service involved:

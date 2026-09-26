@@ -3,6 +3,7 @@
  * provenance — Provenance Protocol CLI (the `provenance` bin of provenance-protocol)
  *
  * Offline — no service involved:
+ *   provenance init [--domain <host>] [--yes]
  *   provenance keygen
  *   provenance sign [file]
  *   provenance verify <file | url | provenance_id> [--from <url>]
@@ -23,6 +24,8 @@ import YAML from 'yaml';
 import { verifyDeclaration, locateDeclaration, keyFingerprint } from './verify.js';
 import { validateDeclaration } from './validate.js';
 import { signDeclaration, signAttestation } from './keygen.js';
+import { detectProject, runInit } from './init.js';
+import { createInterface } from 'readline/promises';
 
 const VERSION = createRequire(import.meta.url)('../package.json').version;
 
@@ -128,6 +131,65 @@ async function cmdKeygen() {
   console.log(`  identity:`);
   console.log(`    public_key: "${publicKey}"`);
   console.log(`    algorithm: ed25519\n`);
+}
+
+async function cmdInit(args) {
+  const dir = process.cwd();
+  const domain = typeof args.domain === 'string' ? args.domain : undefined;
+  const yes = args.yes === true;
+
+  const found = detectProject(dir, { domain });
+  console.log(`\n${amb('Reading your project')} ${dim('(nothing leaves this machine)')}\n`);
+  console.log(`  ${dim('name:')}          ${found.name ?? dim('—')}`);
+  console.log(`  ${dim('identifier:')}    ${found.provenanceId ?? dim('— (you will be asked)')}`);
+  console.log(`  ${dim('AI provider:')}   ${found.model ? `${found.model.provider}${found.model.model_id ? ' · ' + found.model.model_id : ''}` : dim('none detected')}`);
+  if (found.modelIdsSeen.length > 1) console.log(`  ${dim('models seen:')}   ${found.modelIdsSeen.join(', ')} ${dim('(add the one you use to model.model_id)')}`);
+  for (const c of found.capabilities) console.log(`  ${dim('can:')}           ${c.capability} ${dim('— ' + c.reason)}`);
+  for (const d of found.dependencies) console.log(`  ${dim('depends on:')}    ${d.url} ${dim('— ' + d.purpose)}`);
+  console.log();
+
+  let rl;
+  const ask = yes ? undefined : async (question) => {
+    rl ??= createInterface({ input: process.stdin, output: process.stdout });
+    return rl.question(`  ${question}`);
+  };
+  if (!yes && !process.stdin.isTTY) {
+    console.error(err('init asks a few questions. Run it in a terminal, or pass --yes to fill in only what your project shows.'));
+    process.exit(2);
+  }
+
+  let result;
+  try {
+    result = await runInit(dir, { ask, yes, domain, force: args.force === true });
+  } catch (e) {
+    rl?.close();
+    console.error(err(e.message));
+    process.exit(1);
+  }
+  rl?.close();
+
+  const d = result.declaration;
+  console.log(`\n${ok('PROVENANCE.yml written and signed — the signature covers every field')}`);
+  if (d.constraints?.length) console.log(`  ${dim('promises:')} ${d.constraints.join(', ')}`);
+  if (result.keyCreated) {
+    console.log(`\n${ok('New key saved to .provenance-key (added to .gitignore)')}`);
+    console.log(`  ${dim('Keep it safe. Your service signs with it: set PROVENANCE_PRIVATE_KEY to its contents.')}`);
+  }
+  if (result.notStated.length) {
+    console.log(`\n${amb('Not stated yet')} ${dim('(optional — add when a buyer asks, then run `provenance sign`):')}`);
+    for (const n of result.notStated) console.log(`  ${dim('·')} ${n}`);
+    if (yes && result.suggestions.promises.length) {
+      console.log(`  ${dim('Promises your code would support:')} ${result.suggestions.promises.map((p) => p.constraint).join(', ')}`);
+    }
+  }
+  console.log(`\n${amb('Next — pick one way to publish it:')}`);
+  if (d.provenance_id?.startsWith('provenance:github:')) {
+    console.log(`  ${dim('·')} commit PROVENANCE.yml to the repository root`);
+  }
+  console.log(`  ${dim('·')} or serve it from your service: ${hi("app.use(provenance({ declaration: './PROVENANCE.yml' }))")} ${dim('(npm i provenance-middleware)')}`);
+  console.log(`\n${amb('Keep it honest on every build')} ${dim('(.github/workflows/provenance.yml):')}`);
+  console.log(dim('  - uses: ilucky21c/provenance-action@v1'));
+  console.log();
 }
 
 async function cmdSign(args) {
@@ -406,6 +468,7 @@ function cmdHelp() {
 ${hi('provenance')} ${dim(`v${VERSION}`)} — Provenance Protocol CLI
 
 ${amb('Offline — no service involved:')}
+  ${hi('init')}      [--domain <host>] [--yes]  Write and sign your first declaration (about 5 minutes)
   ${hi('keygen')}                              Generate an Ed25519 keypair
   ${hi('sign')}      [file]                     Sign a 0.2 declaration in place (default: ./PROVENANCE.yml)
   ${hi('verify')}    <file | url | id>          Verify a declaration's signature and location
@@ -439,7 +502,7 @@ ${amb('For AJP job delegation:')}
   ${dim('npx @ilucky21c/ajp-cli hire <id> --instruction "..."')}
 
 ${amb('Examples:')}
-  provenance keygen
+  provenance init
   provenance sign
   provenance verify provenance:domain:agent.example.com
   provenance validate
@@ -454,6 +517,7 @@ const cmd  = args._[0];
 
 try {
   if (!cmd || cmd === 'help' || args.help) cmdHelp();
+  else if (cmd === 'init')     await cmdInit(args);
   else if (cmd === 'keygen')   await cmdKeygen();
   else if (cmd === 'sign')     await cmdSign(args);
   else if (cmd === 'verify')   await cmdVerify(args);
